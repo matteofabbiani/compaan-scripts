@@ -1,0 +1,11 @@
+{
+  "name": "compaan-scripts",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Custom JS for the Compaan Webflow site (replaces Slater)",
+  "scripts": {
+    "check": "node --check staging.js && node --check index.js",
+    "diff": "git diff --no-index --stat index.js staging.js || true",
+    "promote": "cp staging.js index.js"
+  }
+}

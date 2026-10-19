@@ -1974,6 +1974,8 @@
 // The navbar embed gives the dropdown background a fixed height (--nav-bg-height).
 // When a dropdown is taller (tablet widths, more rooms) its cards spilled past it.
 // From 768px up, raise the height to fit the open dropdown; never lower it.
+// On short windows the background stops at the window edge and the dropdown
+// scrolls inside itself instead (Lenis is told to leave that scroll alone).
 (function () {
   const root = document.documentElement;
   const bg = document.querySelector('.nav-bg');
@@ -1992,14 +1994,31 @@
     return h;
   }
 
+  function reset(dropdown) {
+    dropdown.style.removeProperty('max-height');
+    dropdown.style.removeProperty('overflow-y');
+    dropdown.removeAttribute('data-lenis-prevent');
+  }
+
   function fit(toggle) {
     root.style.removeProperty('--nav-bg-height');
-    if (!desktop.matches) return;
     const dropdown = toggle.nextElementSibling;
-    const content = dropdown && (dropdown.querySelector('.nav-dropdown__outer-group-wrapper') || dropdown);
-    if (!content) return;
-    const needed = content.getBoundingClientRect().bottom - bg.getBoundingClientRect().top + SPACE_BELOW;
+    if (!dropdown) return;
+    reset(dropdown);
+    if (!desktop.matches) return;
+    const content = dropdown.querySelector('.nav-dropdown__outer-group-wrapper') || dropdown;
+    const bgTop = bg.getBoundingClientRect().top;
+    const windowRoom = window.innerHeight - bgTop;
+    const needed = Math.min(content.getBoundingClientRect().bottom - bgTop + SPACE_BELOW, windowRoom);
     if (needed > baseHeight()) root.style.setProperty('--nav-bg-height', Math.ceil(needed) + 'px');
+
+    // Taller than the window: let the dropdown scroll inside itself
+    const top = dropdown.getBoundingClientRect().top;
+    if (top + dropdown.scrollHeight > window.innerHeight) {
+      dropdown.style.maxHeight = Math.floor(window.innerHeight - top) + 'px';
+      dropdown.style.overflowY = 'auto';
+      dropdown.setAttribute('data-lenis-prevent', '');
+    }
   }
 
   function openToggle() {
@@ -2022,6 +2041,7 @@
       const open = openToggle();
       if (open) fit(open);
       else root.style.removeProperty('--nav-bg-height');
+      if (!desktop.matches) toggles.forEach((t) => t.nextElementSibling && reset(t.nextElementSibling));
     }, 150);
   });
 })();

@@ -1967,3 +1967,61 @@
 })();
 
 
+
+/* ============================================================
+   = NAV DROPDOWN BACKGROUND GROWS WITH ITS CONTENT            =
+   ============================================================ */
+// The navbar embed gives the dropdown background a fixed height (--nav-bg-height).
+// When a dropdown is taller (tablet widths, more rooms) its cards spilled past it.
+// From 768px up, raise the height to fit the open dropdown; never lower it.
+(function () {
+  const root = document.documentElement;
+  const bg = document.querySelector('.nav-bg');
+  const toggles = document.querySelectorAll('[data-dropdown-toggle]');
+  if (!bg || !toggles.length) return;
+
+  const desktop = window.matchMedia('(min-width: 768px)');
+  const SPACE_BELOW = 48;
+
+  function baseHeight() {
+    const probe = document.createElement('div');
+    probe.style.cssText = 'position:absolute;visibility:hidden;pointer-events:none;height:var(--nav-bg-height)';
+    bg.parentElement.appendChild(probe);
+    const h = probe.offsetHeight;
+    probe.remove();
+    return h;
+  }
+
+  function fit(toggle) {
+    root.style.removeProperty('--nav-bg-height');
+    if (!desktop.matches) return;
+    const dropdown = toggle.nextElementSibling;
+    const content = dropdown && (dropdown.querySelector('.nav-dropdown__outer-group-wrapper') || dropdown);
+    if (!content) return;
+    const needed = content.getBoundingClientRect().bottom - bg.getBoundingClientRect().top + SPACE_BELOW;
+    if (needed > baseHeight()) root.style.setProperty('--nav-bg-height', Math.ceil(needed) + 'px');
+  }
+
+  function openToggle() {
+    return Array.from(toggles).find((t) => t.dataset.dropdownToggle === 'open');
+  }
+
+  // The navbar script marks the active toggle with data-dropdown-toggle="open"
+  const observer = new MutationObserver(() => {
+    const open = openToggle();
+    if (!open) return;
+    requestAnimationFrame(() => fit(open));
+    setTimeout(() => fit(open), 500); // again once the opening transition has settled
+  });
+  toggles.forEach((t) => observer.observe(t, { attributes: true, attributeFilter: ['data-dropdown-toggle'] }));
+
+  let resizeTimer;
+  window.addEventListener('resize', () => {
+    clearTimeout(resizeTimer);
+    resizeTimer = setTimeout(() => {
+      const open = openToggle();
+      if (open) fit(open);
+      else root.style.removeProperty('--nav-bg-height');
+    }, 150);
+  });
+})();

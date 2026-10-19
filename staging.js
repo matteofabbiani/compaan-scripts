@@ -889,6 +889,8 @@
 (function () {
   const swiperElements = document.querySelectorAll('[mf-swiper="swiper"]');
   const isMobile = window.innerWidth < 768;
+  // Mouse or trackpad (not touch): grab cursor, inertia that settles on a card, sideways trackpad swipes
+  const finePointer = window.matchMedia('(hover: hover) and (pointer: fine)').matches;
 
   swiperElements.forEach((swiperElement) => {
     try {
@@ -916,6 +918,9 @@
         paginationBulletActiveClass: swiperElement.getAttribute(
           'mf-swiper-pagination-bullet-active-class') || 'swiper_bullet-active',
         navigationNextEl: swiperElement.getAttribute('mf-swiper-navigation-next-el'),
+        navigationDisabledClass: swiperElement.getAttribute(
+          'mf-swiper-navigation-disabled-class') || 'swiper_button-disabled',
+        keyboard: swiperElement.getAttribute('mf-swiper-keyboard') === 'true',
         navigationPrevEl: swiperElement.getAttribute('mf-swiper-navigation-prev-el'),
         mobileSlidesPerView: parseFloat(swiperElement.getAttribute(
           'mf-swiper-mobile-slides-per-view')) || 1,
@@ -948,7 +953,8 @@
         speed: attributes.speed,
         initialSlide: isMobile ? 0 : attributes.initialSlide,
         effect: attributes.effect,
-        grabCursor: attributes.grabCursor,
+        // Hand cursor on every slider (the mf-swiper-grab-cursor attribute is no longer read)
+        grabCursor: true,
         centeredSlides: isMobile ? false : attributes.centeredSlides,
         spaceBetween: attributes.spaceBetween,
 
@@ -981,10 +987,23 @@
         // Navigation
         navigation: {
           nextEl: nextEl || null,
-          prevEl: prevEl || null
+          prevEl: prevEl || null,
+          disabledClass: attributes.navigationDisabledClass
         },
 
-        // Free mode for mobile only
+        keyboard: {
+          enabled: attributes.keyboard,
+          onlyInViewport: true
+        },
+
+        // Two-finger sideways swipe on a trackpad moves the slider; vertical scrolling is left to the page
+        mousewheel: finePointer ? {
+          forceToAxis: true,
+          thresholdDelta: 4
+        } : false,
+
+        // Inertia everywhere. Phones keep the free flow; from 768px the slider
+        // glides on after a flick and then settles on the nearest card.
         freeMode: isMobile ? {
           enabled: true,
           momentum: true,
@@ -993,7 +1012,14 @@
           momentumBounce: true,
           momentumBounceRatio: 0.8,
           sticky: false
-        } : false,
+        } : {
+          enabled: true,
+          momentum: true,
+          momentumRatio: 0.6,
+          momentumVelocityRatio: 1,
+          momentumBounce: false,
+          sticky: true
+        },
 
         // Responsive breakpoints (no freeMode here, handled above)
         breakpoints: {

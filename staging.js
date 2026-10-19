@@ -2045,3 +2045,38 @@
     }, 150);
   });
 })();
+
+/* ============================================================
+   = MEETING ROOM GRID IN THE NAV: EVEN ROWS                   =
+   ============================================================ */
+// Webflow's grid (auto-fit, min 11rem) fills a row and leaves the rest alone on
+// the next one (5 + 1). From 992px up, pick the column count that keeps cards
+// readable and splits the rooms into even rows (3 + 3, 4 + 3, ...).
+(function () {
+  const list = document.querySelector('.nav-dropdown__content.is-meeting-rooms');
+  if (!list) return;
+  const wide = window.matchMedia('(min-width: 992px)');
+  const MIN_CARD = 176; // 11rem: narrowest card where "1 tot 12 personen" stays on one line
+
+  function balance() {
+    list.style.removeProperty('grid-template-columns');
+    if (!wide.matches) return;
+    const count = list.children.length;
+    const width = list.getBoundingClientRect().width;
+    const gap = parseFloat(getComputedStyle(list).columnGap) || 0;
+    if (!count || !width) return;
+    const perRow = Math.max(1, Math.floor((width + gap) / (MIN_CARD + gap)));
+    const rows = Math.ceil(count / perRow);
+    const columns = Math.ceil(count / rows);
+    list.style.gridTemplateColumns = `repeat(${columns}, minmax(0, 1fr))`;
+  }
+
+  balance();
+  let resizeTimer;
+  window.addEventListener('resize', () => {
+    clearTimeout(resizeTimer);
+    resizeTimer = setTimeout(balance, 150);
+  });
+  // The list width is only known once the dropdown is laid out; re-run on open
+  document.querySelectorAll('[data-dropdown-toggle]').forEach((t) => t.addEventListener('mouseenter', balance));
+})();

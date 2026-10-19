@@ -671,10 +671,13 @@
 })();
 
 /* ============================================================
-   = NAVIGATION THEME SWITCHING WITH SCROLLTRIGGER             =
+   = LEGACY: NAVIGATION THEME SWITCHING WITH SCROLLTRIGGER     =
    ============================================================ */
 // Navigation Theme Switching with ScrollTrigger
 (function () {
+  // LEGACY (old navbar markup): does nothing once the navbar carries data-nav.
+  // Remove after the navbar release is live; NAVIGATION below replaces it.
+  if (document.querySelector('[data-nav]')) return;
   // Function to initialize nav theme switching
   function initNavTheme() {
     const nav = document.querySelector('.nav');
@@ -1263,93 +1266,41 @@
 })();
 
 /* ============================================================
-   = MOBILE BUTTON REPOSITIONING                               =
+   = LEGACY: NAVBAR BUTTONS INTO THE MOBILE MENU               =
    ============================================================ */
-// Mobile Button Repositioning - Moves buttons to different containers on mobile
+// Moves the two navbar buttons into the mobile menu list at 767px and below.
 (function () {
+  // LEGACY (old navbar markup): does nothing once the navbar carries data-nav.
+  // Remove after the navbar release is live; NAVIGATION below replaces it.
+  if (document.querySelector('[data-nav]')) return;
   const MOBILE_LANDSCAPE_BREAKPOINT = 767; // Webflow mobile landscape down
-
-  // Select both types of elements to move
-  const buttonWrappers = document.querySelectorAll('.top-sides-button-wrapper');
   const navbarButtons = document.querySelectorAll('.button.is-navbar');
-
-  // Store original positions for restoration
   const originalPositions = new WeakMap();
-
-  // Store original positions for button wrappers
-  buttonWrappers.forEach(wrapper => {
-    originalPositions.set(wrapper, {
-      parent: wrapper.parentElement,
-      nextSibling: wrapper.nextSibling
-    });
-  });
-
-  // Store original positions for navbar buttons
   navbarButtons.forEach(button => {
-    originalPositions.set(button, {
-      parent: button.parentElement,
-      nextSibling: button.nextSibling
-    });
+    originalPositions.set(button, { parent: button.parentElement, nextSibling: button.nextSibling });
   });
 
   function moveButtons() {
-    const isMobileLandscapeDown = window.innerWidth <= MOBILE_LANDSCAPE_BREAKPOINT;
-
-    if (isMobileLandscapeDown) {
-      // Move button wrappers to padding-section-large
-      buttonWrappers.forEach(wrapper => {
-        const paddingSection = wrapper.closest('.padding-section-large');
-
-        if (paddingSection && wrapper.parentElement !== paddingSection) {
-          paddingSection.appendChild(wrapper);
-        }
-      });
-
-      // Move navbar buttons to nav-center__list
+    if (window.innerWidth <= MOBILE_LANDSCAPE_BREAKPOINT) {
       const navCenterList = document.querySelector('.nav-center__list');
-      if (navCenterList) {
-        navbarButtons.forEach(button => {
-          // Only move if not already in the list
-          if (button.parentElement !== navCenterList) {
-            // Create li wrapper for each button
-            const li = document.createElement('li');
-            li.className = 'nav-center__list-item';
-            li.style.setProperty('padding-left', '1.25rem', 'important');
-            li.style.setProperty('padding-right', '1.25rem', 'important');
-            li.appendChild(button);
-            navCenterList.appendChild(li);
-
-            // Store the li wrapper so we can remove it later
-            originalPositions.get(button).liWrapper = li;
-          }
-        });
-      }
-    } else {
-      // Restore button wrappers to original positions
-      buttonWrappers.forEach(wrapper => {
-        const original = originalPositions.get(wrapper);
-        if (original && wrapper.parentElement !== original.parent) {
-          if (original.nextSibling && original.nextSibling.parentElement === original
-            .parent) {
-            original.parent.insertBefore(wrapper, original.nextSibling);
-          } else {
-            original.parent.appendChild(wrapper);
-          }
+      if (!navCenterList) return;
+      navbarButtons.forEach(button => {
+        if (button.parentElement !== navCenterList) {
+          const li = document.createElement('li');
+          li.className = 'nav-center__list-item';
+          li.style.setProperty('padding-left', '1.25rem', 'important');
+          li.style.setProperty('padding-right', '1.25rem', 'important');
+          li.appendChild(button);
+          navCenterList.appendChild(li);
+          originalPositions.get(button).liWrapper = li;
         }
       });
-
-      // Restore navbar buttons to original positions
+    } else {
       navbarButtons.forEach(button => {
         const original = originalPositions.get(button);
         if (original && button.parentElement !== original.parent) {
-          // Remove from li wrapper if it exists
-          if (original.liWrapper && original.liWrapper.parentElement) {
-            original.liWrapper.remove();
-          }
-
-          // Restore to original position
-          if (original.nextSibling && original.nextSibling.parentElement === original
-            .parent) {
+          if (original.liWrapper && original.liWrapper.parentElement) original.liWrapper.remove();
+          if (original.nextSibling && original.nextSibling.parentElement === original.parent) {
             original.parent.insertBefore(button, original.nextSibling);
           } else {
             original.parent.appendChild(button);
@@ -1359,16 +1310,11 @@
     }
   }
 
-  // Run on initial load
   moveButtons();
-
-  // Handle window resize with debounce for performance
   let resizeTimer;
   window.addEventListener('resize', () => {
     clearTimeout(resizeTimer);
-    resizeTimer = setTimeout(() => {
-      requestAnimationFrame(moveButtons);
-    }, 150);
+    resizeTimer = setTimeout(() => requestAnimationFrame(moveButtons), 150);
   });
 })();
 
@@ -1840,7 +1786,7 @@
     });
 
     // Get restricted logo element
-    const restrictedLogo = document.querySelector(".nav-logo-svg.is-restricted");
+    const restrictedLogo = document.querySelector("[data-nav-logo-restricted], .nav-logo-svg.is-restricted");
 
     // Main image animation ScrollTrigger
     const mainScrollTrigger = ScrollTrigger.create({
@@ -1899,9 +1845,9 @@
     });
 
     // Nav logo animation
-    const navLogoSvgHome = document.querySelector(".nav-logo-svg-home");
-    const navLogoHome = document.querySelector(".nav-logo-home");
-    const navLogoTarget = document.querySelector(".nav-logo");
+    const navLogoSvgHome = document.querySelector("[data-nav-logo-home-svg], .nav-logo-svg-home");
+    const navLogoHome = document.querySelector("[data-nav-logo-home], .nav-logo-home");
+    const navLogoTarget = document.querySelector("[data-nav-logo], .nav-logo");
 
     if (navLogoSvgHome && navLogoHome && navLogoTarget) {
       const navScrollTrigger = ScrollTrigger.create({
@@ -1969,7 +1915,7 @@
 
 
 /* ============================================================
-   = NAV DROPDOWN BACKGROUND GROWS WITH ITS CONTENT            =
+   = LEGACY: NAV DROPDOWN BACKGROUND GROWS WITH ITS CONTENT      =
    ============================================================ */
 // The navbar embed gives the dropdown background a fixed height (--nav-bg-height).
 // When a dropdown is taller (tablet widths, more rooms) its cards spilled past it.
@@ -1977,6 +1923,9 @@
 // On short windows the background stops at the window edge and the dropdown
 // scrolls inside itself instead (Lenis is told to leave that scroll alone).
 (function () {
+  // LEGACY (old navbar markup): does nothing once the navbar carries data-nav.
+  // Remove after the navbar release is live; NAVIGATION below replaces it.
+  if (document.querySelector('[data-nav]')) return;
   const root = document.documentElement;
   const bg = document.querySelector('.nav-bg');
   const toggles = document.querySelectorAll('[data-dropdown-toggle]');
@@ -2047,12 +1996,15 @@
 })();
 
 /* ============================================================
-   = MEETING ROOM GRID IN THE NAV: EVEN ROWS                   =
+   = LEGACY: MEETING ROOM GRID IN THE NAV: EVEN ROWS             =
    ============================================================ */
 // Webflow's grid (auto-fit, min 11rem) fills a row and leaves the rest alone on
 // the next one (5 + 1). From 992px up, pick the column count that keeps cards
 // readable and splits the rooms into even rows (3 + 3, 4 + 3, ...).
 (function () {
+  // LEGACY (old navbar markup): does nothing once the navbar carries data-nav.
+  // Remove after the navbar release is live; NAVIGATION below replaces it.
+  if (document.querySelector('[data-nav]')) return;
   const list = document.querySelector('.nav-dropdown__content.is-meeting-rooms');
   if (!list) return;
   const wide = window.matchMedia('(min-width: 992px)');
@@ -2079,4 +2031,325 @@
   });
   // The list width is only known once the dropdown is laid out; re-run on open
   document.querySelectorAll('[data-dropdown-toggle]').forEach((t) => t.addEventListener('mouseenter', balance));
+})();
+
+/* ============================================================
+   = NAVIGATION                                                =
+   ============================================================ */
+// Everything the navbar does, in one place. Elements are found by data-nav-*
+// attributes set in the Webflow Navbar component, never by class names, so
+// classes can be renamed in the Style panel without touching this code.
+//
+//   data-nav                    <nav> root, also carries data-menu-status
+//   data-nav-background         background panel behind open dropdowns
+//   data-nav-menu-list          the <ul> of top-level links
+//   data-nav-link               plain top-level links (hovering one closes dropdowns)
+//   data-dropdown-toggle        dropdown buttons; value "open" / "closed"
+//   data-nav-dropdown           dropdown panel (the toggle's next sibling)
+//   data-nav-dropdown-content   the content inside a panel, measured for its height
+//   data-nav-rooms-list         meeting-room Collection List
+//   data-nav-events-list        events Collection List
+//   data-nav-static-item        "Bekijk alle events" card, moved to the end of the events list
+//   data-nav-mobile-move        navbar buttons, moved into the mobile menu
+//   data-menu-button            burger button
+(function () {
+  const nav = document.querySelector('[data-nav]');
+  if (!nav) return;
+
+  const mobile = window.matchMedia('(max-width: 767px)');
+  const root = document.documentElement;
+  const background = nav.querySelector('[data-nav-background]');
+  const menuList = nav.querySelector('[data-nav-menu-list]');
+  const menuButton = nav.querySelector('[data-menu-button]');
+  const toggles = Array.from(nav.querySelectorAll('[data-dropdown-toggle]'));
+  const dropdownOf = (toggle) => toggle.nextElementSibling;
+  const linksIn = (dropdown) => Array.from(dropdown.querySelectorAll('a[href]'));
+
+  /* ---------- Open / close ---------- */
+
+  function setOpen(toggle, open) {
+    toggle.dataset.dropdownToggle = open ? 'open' : 'closed';
+    toggle.setAttribute('aria-expanded', String(open));
+    if (!mobile.matches) dropdownOf(toggle).setAttribute('aria-hidden', String(!open));
+  }
+
+  function closeOthers(except) {
+    toggles.forEach((other) => {
+      if (other === except) return;
+      setOpen(other, false);
+      if (mobile.matches && other === document.activeElement) other.blur();
+    });
+  }
+
+  const closeAll = () => closeOthers(null);
+
+  /* ---------- Accessibility wiring ---------- */
+
+  menuButton?.setAttribute('aria-controls', 'nav-mobile-menu');
+  menuButton?.setAttribute('aria-expanded', 'false');
+  nav.id = nav.id || 'nav-mobile-menu';
+  nav.setAttribute('aria-label', 'Hoofdmenu');
+
+  toggles.forEach((toggle, i) => {
+    const dropdown = dropdownOf(toggle);
+    if (!dropdown) return;
+    dropdown.id = dropdown.id || `nav-dropdown-${i}`;
+    toggle.setAttribute('aria-controls', dropdown.id);
+    toggle.setAttribute('aria-haspopup', 'true');
+    toggle.setAttribute('aria-expanded', 'false');
+    if (!mobile.matches) dropdown.setAttribute('aria-hidden', 'true');
+  });
+
+  /* ---------- Mobile: burger and accordion dropdowns ---------- */
+
+  menuButton?.addEventListener('click', () => {
+    const open = nav.dataset.menuStatus === 'open';
+    nav.dataset.menuStatus = open ? 'closed' : 'open';
+    menuButton.setAttribute('aria-expanded', String(!open));
+  });
+
+  /* ---------- Desktop: hover, click and keyboard ---------- */
+
+  toggles.forEach((toggle) => {
+    const dropdown = dropdownOf(toggle);
+    if (!dropdown) return;
+
+    toggle.addEventListener('click', (e) => {
+      if (mobile.matches) {
+        const open = toggle.dataset.dropdownToggle === 'open';
+        closeOthers(toggle);
+        setOpen(toggle, !open);
+        if (open && toggle === document.activeElement) toggle.blur();
+        return;
+      }
+      e.preventDefault();
+      const wasOpen = toggle.dataset.dropdownToggle === 'open';
+      closeOthers(toggle);
+      setOpen(toggle, true);
+      if (!wasOpen) linksIn(dropdown)[0]?.focus();
+    });
+
+    toggle.addEventListener('mouseenter', () => {
+      if (mobile.matches) return;
+      const anotherOpen = toggles.some((t) => t !== toggle && t.dataset.dropdownToggle === 'open');
+      closeOthers(toggle);
+      // Short pause when switching between dropdowns, so the panels don't flicker
+      if (anotherOpen) setTimeout(() => setOpen(toggle, true), 20);
+      else setOpen(toggle, true);
+    });
+
+    dropdown.addEventListener('mouseleave', () => {
+      if (!mobile.matches) setOpen(toggle, false);
+    });
+
+    toggle.addEventListener('keydown', (e) => {
+      if (mobile.matches) return;
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        toggle.click();
+      } else if (e.key === 'Escape') {
+        setOpen(toggle, false);
+        toggle.focus();
+      }
+    });
+
+    dropdown.addEventListener('keydown', (e) => {
+      if (mobile.matches) return;
+      const items = linksIn(dropdown);
+      const index = items.indexOf(document.activeElement);
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        items[(index + 1) % items.length]?.focus();
+      } else if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        items[(index - 1 + items.length) % items.length]?.focus();
+      } else if (e.key === 'Escape') {
+        e.preventDefault();
+        setOpen(toggle, false);
+        toggle.focus();
+      }
+    });
+
+    // Close once keyboard focus leaves the dropdown (the old code closed on any Tab press)
+    dropdown.addEventListener('focusout', (e) => {
+      if (mobile.matches) return;
+      if (!dropdown.contains(e.relatedTarget) && e.relatedTarget !== toggle) setOpen(toggle, false);
+    });
+  });
+
+  nav.querySelectorAll('[data-nav-link]').forEach((link) => {
+    link.addEventListener('mouseenter', () => { if (!mobile.matches) closeAll(); });
+  });
+
+  document.addEventListener('click', (e) => {
+    if (mobile.matches) return;
+    const inside = toggles.some((t) => t.contains(e.target) || dropdownOf(t)?.contains(e.target));
+    if (!inside) closeAll();
+  });
+
+  // Switching between phone and desktop layouts starts from a clean state
+  mobile.addEventListener('change', () => {
+    closeAll();
+    toggles.forEach((t) => {
+      const dropdown = dropdownOf(t);
+      if (mobile.matches) dropdown.removeAttribute('aria-hidden');
+      else dropdown.setAttribute('aria-hidden', 'true');
+    });
+  });
+
+  /* ---------- "Bekijk alle events" as the last card of the events list ---------- */
+
+  const staticItem = nav.querySelector('[data-nav-static-item]');
+  const eventsList = nav.querySelector('[data-nav-events-list]');
+  if (staticItem && eventsList) eventsList.appendChild(staticItem);
+
+  /* ---------- Navbar buttons inside the mobile menu ---------- */
+
+  const movable = Array.from(nav.querySelectorAll('[data-nav-mobile-move]')).map((button) => ({
+    button, parent: button.parentElement, next: button.nextSibling, item: null,
+  }));
+
+  function placeButtons() {
+    movable.forEach((m) => {
+      if (mobile.matches && menuList && !m.item) {
+        m.item = document.createElement('li');
+        m.item.className = 'nav_menu-item';
+        m.item.style.setProperty('padding-left', '1.25rem', 'important');
+        m.item.style.setProperty('padding-right', '1.25rem', 'important');
+        m.item.appendChild(m.button);
+        menuList.appendChild(m.item);
+      } else if (!mobile.matches && m.item) {
+        m.parent.insertBefore(m.button, m.next && m.next.parentElement === m.parent ? m.next : null);
+        m.item.remove();
+        m.item = null;
+      }
+    });
+  }
+  placeButtons();
+  mobile.addEventListener('change', placeButtons);
+
+  /* ---------- Background height follows the open dropdown ---------- */
+
+  // The navbar CSS gives the background a fixed height (--nav-bg-height). From 768px
+  // up, raise it to fit taller content, never lower it, and never past the window;
+  // when the content is taller than the window, the dropdown scrolls inside itself.
+  const SPACE_BELOW = 48;
+
+  function baseHeight() {
+    const probe = document.createElement('div');
+    probe.style.cssText = 'position:absolute;visibility:hidden;pointer-events:none;height:var(--nav-bg-height)';
+    background.parentElement.appendChild(probe);
+    const h = probe.offsetHeight;
+    probe.remove();
+    return h;
+  }
+
+  function resetScroll(dropdown) {
+    dropdown.style.removeProperty('max-height');
+    dropdown.style.removeProperty('overflow-y');
+    dropdown.removeAttribute('data-lenis-prevent');
+  }
+
+  function fitBackground(toggle) {
+    root.style.removeProperty('--nav-bg-height');
+    const dropdown = dropdownOf(toggle);
+    if (!dropdown || !background) return;
+    resetScroll(dropdown);
+    if (mobile.matches) return;
+    const content = dropdown.querySelector('[data-nav-dropdown-content]') || dropdown;
+    const bgTop = background.getBoundingClientRect().top;
+    const needed = Math.min(content.getBoundingClientRect().bottom - bgTop + SPACE_BELOW, window.innerHeight - bgTop);
+    if (needed > baseHeight()) root.style.setProperty('--nav-bg-height', Math.ceil(needed) + 'px');
+
+    const top = dropdown.getBoundingClientRect().top;
+    if (top + dropdown.scrollHeight > window.innerHeight) {
+      dropdown.style.maxHeight = Math.floor(window.innerHeight - top) + 'px';
+      dropdown.style.overflowY = 'auto';
+      dropdown.setAttribute('data-lenis-prevent', '');
+    }
+  }
+
+  const openToggle = () => toggles.find((t) => t.dataset.dropdownToggle === 'open');
+
+  new MutationObserver(() => {
+    const open = openToggle();
+    if (!open) return;
+    requestAnimationFrame(() => fitBackground(open));
+    setTimeout(() => fitBackground(open), 500); // again once the opening transition has settled
+  }).observe(nav, { subtree: true, attributes: true, attributeFilter: ['data-dropdown-toggle'] });
+
+  /* ---------- Meeting rooms in even rows ---------- */
+
+  // Webflow's grid (auto-fit, min 11rem) fills a row and leaves the rest alone on the
+  // next one (5 + 1). From 992px up, use the column count that keeps cards readable
+  // and splits the rooms into even rows (3 + 3, 4 + 3, ...).
+  const roomsList = nav.querySelector('[data-nav-rooms-list]');
+  const wide = window.matchMedia('(min-width: 992px)');
+  const MIN_CARD = 176; // 11rem: narrowest card where "1 tot 12 personen" stays on one line
+
+  function balanceRooms() {
+    if (!roomsList) return;
+    roomsList.style.removeProperty('grid-template-columns');
+    if (!wide.matches) return;
+    const count = roomsList.children.length;
+    const width = roomsList.getBoundingClientRect().width;
+    const gap = parseFloat(getComputedStyle(roomsList).columnGap) || 0;
+    if (!count || !width) return;
+    const perRow = Math.max(1, Math.floor((width + gap) / (MIN_CARD + gap)));
+    const rows = Math.ceil(count / perRow);
+    roomsList.style.gridTemplateColumns = `repeat(${Math.ceil(count / rows)}, minmax(0, 1fr))`;
+  }
+  balanceRooms();
+  toggles.forEach((t) => t.addEventListener('mouseenter', balanceRooms));
+
+  /* ---------- Resizing ---------- */
+
+  let resizeTimer;
+  window.addEventListener('resize', () => {
+    clearTimeout(resizeTimer);
+    resizeTimer = setTimeout(() => {
+      balanceRooms();
+      const open = openToggle();
+      if (open) fitBackground(open);
+      else root.style.removeProperty('--nav-bg-height');
+      if (mobile.matches) toggles.forEach((t) => dropdownOf(t) && resetScroll(dropdownOf(t)));
+    }, 150);
+  });
+
+  /* ---------- Theme switching on scroll ---------- */
+
+  // Sections with data-nav-theme="light|dark" switch the navbar theme when they reach
+  // data-nav-theme-at (default "top top"); the body's data-nav-initial-theme sets the start.
+  function setTheme(theme) {
+    nav.classList.remove('theme-light', 'theme-dark');
+    nav.classList.add(`theme-${theme}`);
+  }
+  const initialTheme = document.body.getAttribute('data-nav-initial-theme') ||
+    (nav.classList.contains('theme-dark') ? 'dark' : 'light');
+  setTheme(initialTheme);
+
+  const themeTriggers = Array.from(document.querySelectorAll('[data-nav-theme]'));
+  const instances = themeTriggers.map((trigger, index) => ({
+    theme: trigger.getAttribute('data-nav-theme'),
+    st: ScrollTrigger.create({
+      trigger,
+      start: trigger.getAttribute('data-nav-theme-at') || 'top top',
+      onEnter: () => setTheme(trigger.getAttribute('data-nav-theme')),
+      onLeaveBack: () => setTheme(index > 0 ? themeTriggers[index - 1].getAttribute('data-nav-theme') : initialTheme),
+    }),
+  }));
+
+  function applyThemeForScroll() {
+    ScrollTrigger.refresh();
+    requestAnimationFrame(() => {
+      let theme = initialTheme;
+      [...instances].sort((a, b) => a.st.start - b.st.start).forEach(({ st, theme: t }) => {
+        if (window.scrollY >= st.start) theme = t;
+      });
+      setTheme(theme);
+    });
+  }
+  // Positions settle as images and fonts load; check a few times like before
+  [100, 300, 500].forEach((ms) => setTimeout(applyThemeForScroll, ms));
+  window.addEventListener('load', () => setTimeout(applyThemeForScroll, 100));
 })();

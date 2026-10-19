@@ -2048,15 +2048,14 @@
 //   data-nav-dropdown           dropdown panel (the toggle's next sibling)
 //   data-nav-dropdown-content   the content inside a panel, measured for its height
 //   data-nav-rooms-list         meeting-room Collection List
-//   data-nav-events-list        events Collection List
-//   data-nav-static-item        "Bekijk alle events" card, moved to the end of the events list
 //   data-nav-mobile-move        navbar buttons, moved into the mobile menu
 //   data-menu-button            burger button
 (function () {
   const nav = document.querySelector('[data-nav]');
   if (!nav) return;
 
-  const mobile = window.matchMedia('(max-width: 767px)');
+  // Burger menu up to and including tablet; desktop dropdowns from 992px
+  const mobile = window.matchMedia('(max-width: 991px)');
   const root = document.documentElement;
   const background = nav.querySelector('[data-nav-background]');
   const menuList = nav.querySelector('[data-nav-menu-list]');
@@ -2102,10 +2101,34 @@
 
   /* ---------- Mobile: burger and accordion dropdowns ---------- */
 
-  menuButton?.addEventListener('click', () => {
-    const open = nav.dataset.menuStatus === 'open';
-    nav.dataset.menuStatus = open ? 'closed' : 'open';
-    menuButton.setAttribute('aria-expanded', String(!open));
+  function setMenu(open) {
+    nav.dataset.menuStatus = open ? 'open' : 'closed';
+    menuButton?.setAttribute('aria-expanded', String(open));
+  }
+
+  menuButton?.addEventListener('click', () => setMenu(nav.dataset.menuStatus !== 'open'));
+
+  // While the burger menu is open: Escape closes it, Tab stays inside the navbar
+  nav.addEventListener('keydown', (e) => {
+    if (!mobile.matches || nav.dataset.menuStatus !== 'open') return;
+    if (e.key === 'Escape') {
+      setMenu(false);
+      menuButton?.focus();
+      return;
+    }
+    if (e.key !== 'Tab') return;
+    const focusable = Array.from(nav.querySelectorAll('a[href], button'))
+      .filter((el) => el.offsetParent !== null && getComputedStyle(el).visibility !== 'hidden');
+    if (!focusable.length) return;
+    const first = focusable[0];
+    const last = focusable[focusable.length - 1];
+    if (e.shiftKey && document.activeElement === first) {
+      e.preventDefault();
+      last.focus();
+    } else if (!e.shiftKey && document.activeElement === last) {
+      e.preventDefault();
+      first.focus();
+    }
   });
 
   /* ---------- Desktop: hover, click and keyboard ---------- */
@@ -2124,6 +2147,7 @@
       }
       e.preventDefault();
       const wasOpen = toggle.dataset.dropdownToggle === 'open';
+      fitBackground(toggle);
       closeOthers(toggle);
       setOpen(toggle, true);
       if (!wasOpen) linksIn(dropdown)[0]?.focus();
@@ -2131,6 +2155,7 @@
 
     toggle.addEventListener('mouseenter', () => {
       if (mobile.matches) return;
+      fitBackground(toggle);
       const anotherOpen = toggles.some((t) => t !== toggle && t.dataset.dropdownToggle === 'open');
       closeOthers(toggle);
       // Short pause when switching between dropdowns, so the panels don't flicker
@@ -2197,12 +2222,6 @@
     });
   });
 
-  /* ---------- "Bekijk alle events" as the last card of the events list ---------- */
-
-  const staticItem = nav.querySelector('[data-nav-static-item]');
-  const eventsList = nav.querySelector('[data-nav-events-list]');
-  if (staticItem && eventsList) eventsList.appendChild(staticItem);
-
   /* ---------- Navbar buttons inside the mobile menu ---------- */
 
   const movable = Array.from(nav.querySelectorAll('[data-nav-mobile-move]')).map((button) => ({
@@ -2230,19 +2249,12 @@
 
   /* ---------- Background height follows the open dropdown ---------- */
 
-  // The navbar CSS gives the background a fixed height (--nav-bg-height). From 768px
-  // up, raise it to fit taller content, never lower it, and never past the window;
-  // when the content is taller than the window, the dropdown scrolls inside itself.
+  // One background sits behind every dropdown. Before a dropdown opens, its height is
+  // measured and written to --nav-bg-height; the background's height transition then
+  // morphs it from the previous dropdown's height to this one. Panels are laid out even
+  // while hidden, so they can be measured in advance. Capped at the window height; a
+  // taller dropdown scrolls inside itself (Lenis is told to leave that scroll alone).
   const SPACE_BELOW = 48;
-
-  function baseHeight() {
-    const probe = document.createElement('div');
-    probe.style.cssText = 'position:absolute;visibility:hidden;pointer-events:none;height:var(--nav-bg-height)';
-    background.parentElement.appendChild(probe);
-    const h = probe.offsetHeight;
-    probe.remove();
-    return h;
-  }
 
   function resetScroll(dropdown) {
     dropdown.style.removeProperty('max-height');
@@ -2251,15 +2263,18 @@
   }
 
   function fitBackground(toggle) {
-    root.style.removeProperty('--nav-bg-height');
     const dropdown = dropdownOf(toggle);
     if (!dropdown || !background) return;
     resetScroll(dropdown);
-    if (mobile.matches) return;
+    if (mobile.matches) {
+      root.style.removeProperty('--nav-bg-height');
+      return;
+    }
+    balanceRooms();
     const content = dropdown.querySelector('[data-nav-dropdown-content]') || dropdown;
     const bgTop = background.getBoundingClientRect().top;
     const needed = Math.min(content.getBoundingClientRect().bottom - bgTop + SPACE_BELOW, window.innerHeight - bgTop);
-    if (needed > baseHeight()) root.style.setProperty('--nav-bg-height', Math.ceil(needed) + 'px');
+    root.style.setProperty('--nav-bg-height', Math.ceil(needed) + 'px');
 
     const top = dropdown.getBoundingClientRect().top;
     if (top + dropdown.scrollHeight > window.innerHeight) {
@@ -2271,12 +2286,11 @@
 
   const openToggle = () => toggles.find((t) => t.dataset.dropdownToggle === 'open');
 
-  new MutationObserver(() => {
-    const open = openToggle();
-    if (!open) return;
-    requestAnimationFrame(() => fitBackground(open));
-    setTimeout(() => fitBackground(open), 500); // again once the opening transition has settled
-  }).observe(nav, { subtree: true, attributes: true, attributeFilter: ['data-dropdown-toggle'] });
+  // Keyboard focus opens a dropdown through CSS (:focus-within); size it first
+  toggles.forEach((t) => {
+    t.addEventListener('focus', () => fitBackground(t));
+    dropdownOf(t)?.addEventListener('focusin', () => fitBackground(t));
+  });
 
   /* ---------- Meeting rooms in even rows ---------- */
 
@@ -2300,7 +2314,6 @@
     roomsList.style.gridTemplateColumns = `repeat(${Math.ceil(count / rows)}, minmax(0, 1fr))`;
   }
   balanceRooms();
-  toggles.forEach((t) => t.addEventListener('mouseenter', balanceRooms));
 
   /* ---------- Resizing ---------- */
 
@@ -2311,8 +2324,10 @@
       balanceRooms();
       const open = openToggle();
       if (open) fitBackground(open);
-      else root.style.removeProperty('--nav-bg-height');
-      if (mobile.matches) toggles.forEach((t) => dropdownOf(t) && resetScroll(dropdownOf(t)));
+      if (mobile.matches) {
+        root.style.removeProperty('--nav-bg-height');
+        toggles.forEach((t) => dropdownOf(t) && resetScroll(dropdownOf(t)));
+      }
     }, 150);
   });
 

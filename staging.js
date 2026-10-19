@@ -997,11 +997,6 @@
           onlyInViewport: true
         },
 
-        // Two-finger sideways swipe on a trackpad moves the slider; vertical scrolling is left to the page
-        mousewheel: finePointer ? {
-          forceToAxis: true,
-          thresholdDelta: 4
-        } : false,
 
         // Inertia everywhere. Phones keep the free flow; from 768px the slider
         // glides on after a flick and then settles on the nearest card.
@@ -1016,8 +1011,8 @@
         } : {
           enabled: true,
           momentum: true,
-          momentumRatio: 0.6,
-          momentumVelocityRatio: 1,
+          momentumRatio: 0.35,
+          momentumVelocityRatio: 0.6,
           momentumBounce: false,
           sticky: true
         },
@@ -1065,6 +1060,29 @@
           }
         }
       });
+
+      // Two-finger sideways swipe on a trackpad: the slider follows the fingers 1:1 and
+      // settles on the nearest card once the swipe (including the trackpad's own glide)
+      // has stopped. Vertical scrolling over a slider is left to the page.
+      if (finePointer) {
+        let settleTimer = null;
+        swiper.el.addEventListener('wheel', (e) => {
+          if (swiper.destroyed || swiper.isLocked) return;
+          if (Math.abs(e.deltaX) <= Math.abs(e.deltaY)) return;
+          e.preventDefault();
+          e.stopPropagation(); // keep Lenis out of it
+          const delta = e.deltaMode === 1 ? e.deltaX * 16 : e.deltaX;
+          const next = Math.min(swiper.minTranslate(),
+            Math.max(swiper.maxTranslate(), swiper.translate - delta));
+          swiper.setTransition(0);
+          swiper.setTranslate(next);
+          swiper.updateProgress();
+          swiper.updateActiveIndex();
+          swiper.updateSlidesClasses();
+          clearTimeout(settleTimer);
+          settleTimer = setTimeout(() => swiper.slideToClosest(450), 160);
+        }, { passive: false });
+      }
 
       // Handle lazy-loaded images
       const images = swiperElement.querySelectorAll('img');

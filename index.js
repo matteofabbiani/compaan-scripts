@@ -1974,6 +1974,8 @@
 // The navbar embed gives the dropdown background a fixed height (--nav-bg-height).
 // When a dropdown is taller (tablet widths, more rooms) its cards spilled past it.
 // From 768px up, raise the height to fit the open dropdown; never lower it.
+// On short windows the background stops at the window edge and the dropdown
+// scrolls inside itself instead (Lenis is told to leave that scroll alone).
 (function () {
   const root = document.documentElement;
   const bg = document.querySelector('.nav-bg');
@@ -1992,14 +1994,31 @@
     return h;
   }
 
+  function reset(dropdown) {
+    dropdown.style.removeProperty('max-height');
+    dropdown.style.removeProperty('overflow-y');
+    dropdown.removeAttribute('data-lenis-prevent');
+  }
+
   function fit(toggle) {
     root.style.removeProperty('--nav-bg-height');
-    if (!desktop.matches) return;
     const dropdown = toggle.nextElementSibling;
-    const content = dropdown && (dropdown.querySelector('.nav-dropdown__outer-group-wrapper') || dropdown);
-    if (!content) return;
-    const needed = content.getBoundingClientRect().bottom - bg.getBoundingClientRect().top + SPACE_BELOW;
+    if (!dropdown) return;
+    reset(dropdown);
+    if (!desktop.matches) return;
+    const content = dropdown.querySelector('.nav-dropdown__outer-group-wrapper') || dropdown;
+    const bgTop = bg.getBoundingClientRect().top;
+    const windowRoom = window.innerHeight - bgTop;
+    const needed = Math.min(content.getBoundingClientRect().bottom - bgTop + SPACE_BELOW, windowRoom);
     if (needed > baseHeight()) root.style.setProperty('--nav-bg-height', Math.ceil(needed) + 'px');
+
+    // Taller than the window: let the dropdown scroll inside itself
+    const top = dropdown.getBoundingClientRect().top;
+    if (top + dropdown.scrollHeight > window.innerHeight) {
+      dropdown.style.maxHeight = Math.floor(window.innerHeight - top) + 'px';
+      dropdown.style.overflowY = 'auto';
+      dropdown.setAttribute('data-lenis-prevent', '');
+    }
   }
 
   function openToggle() {
@@ -2022,6 +2041,42 @@
       const open = openToggle();
       if (open) fit(open);
       else root.style.removeProperty('--nav-bg-height');
+      if (!desktop.matches) toggles.forEach((t) => t.nextElementSibling && reset(t.nextElementSibling));
     }, 150);
   });
+})();
+
+/* ============================================================
+   = MEETING ROOM GRID IN THE NAV: EVEN ROWS                   =
+   ============================================================ */
+// Webflow's grid (auto-fit, min 11rem) fills a row and leaves the rest alone on
+// the next one (5 + 1). From 992px up, pick the column count that keeps cards
+// readable and splits the rooms into even rows (3 + 3, 4 + 3, ...).
+(function () {
+  const list = document.querySelector('.nav-dropdown__content.is-meeting-rooms');
+  if (!list) return;
+  const wide = window.matchMedia('(min-width: 992px)');
+  const MIN_CARD = 176; // 11rem: narrowest card where "1 tot 12 personen" stays on one line
+
+  function balance() {
+    list.style.removeProperty('grid-template-columns');
+    if (!wide.matches) return;
+    const count = list.children.length;
+    const width = list.getBoundingClientRect().width;
+    const gap = parseFloat(getComputedStyle(list).columnGap) || 0;
+    if (!count || !width) return;
+    const perRow = Math.max(1, Math.floor((width + gap) / (MIN_CARD + gap)));
+    const rows = Math.ceil(count / perRow);
+    const columns = Math.ceil(count / rows);
+    list.style.gridTemplateColumns = `repeat(${columns}, minmax(0, 1fr))`;
+  }
+
+  balance();
+  let resizeTimer;
+  window.addEventListener('resize', () => {
+    clearTimeout(resizeTimer);
+    resizeTimer = setTimeout(balance, 150);
+  });
+  // The list width is only known once the dropdown is laid out; re-run on open
+  document.querySelectorAll('[data-dropdown-toggle]').forEach((t) => t.addEventListener('mouseenter', balance));
 })();

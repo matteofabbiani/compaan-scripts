@@ -918,8 +918,9 @@
         paginationBulletActiveClass: swiperElement.getAttribute(
           'mf-swiper-pagination-bullet-active-class') || 'swiper_bullet-active',
         navigationNextEl: swiperElement.getAttribute('mf-swiper-navigation-next-el'),
-        navigationDisabledClass: swiperElement.getAttribute(
-          'mf-swiper-navigation-disabled-class') || 'swiper_button-disabled',
+        // The Webflow class is swiper_button-disable (kept by a hidden placeholder in each
+        // slider); the mf-swiper-navigation-disabled-class attribute names a class that does not exist
+        navigationDisabledClass: 'swiper_button-disable',
         keyboard: swiperElement.getAttribute('mf-swiper-keyboard') === 'true',
         navigationPrevEl: swiperElement.getAttribute('mf-swiper-navigation-prev-el'),
         mobileSlidesPerView: parseFloat(swiperElement.getAttribute(

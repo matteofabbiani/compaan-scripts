@@ -41,7 +41,7 @@
       wheelMultiplier: 1,
       touchMultiplier: 2,
       infinite: false,
-      // A sideways swipe over a slider scrolls the slider natively (see SWIPER module)
+      // A sideways swipe over a slider is left to the slider (see SWIPER module)
       prevent: (node) => node.sliderGestureUntil > performance.now()
     });
 
@@ -885,108 +885,14 @@
 })();
 
 /* ============================================================
-   = SWIPER SLIDER SETUP (NATIVE SCROLL)                       =
+   = SWIPER SLIDER SETUP                                       =
    ============================================================ */
-// Swiper in CSS mode: the browser scrolls and snaps the cards, so trackpad and
-// touch swipes keep the device's own momentum. Mouse dragging is added below.
-// CSS: Global Styles -> page_code_sliders embed.
+// Feel modelled on frenchmornings.com: Swiper's default physics and speed,
+// free mode with sticky snapping on desktop, trackpad swipes via the mousewheel module.
 (function () {
   const swiperElements = document.querySelectorAll('[mf-swiper="swiper"]');
   const isMobile = window.innerWidth < 768;
-  const finePointer = window.matchMedia('(hover: hover) and (pointer: fine)').matches;
-
-  // Edge-to-edge scroll area: tell the CSS how far the slider sits from the screen edges
-  function setBleed(swiper) {
-    const r = swiper.el.getBoundingClientRect();
-    if (r.width === 0) return; // hidden: measured again when it gets a size
-    const vw = document.documentElement.clientWidth;
-    // Set on the scroll area: Swiper re-runs update() when the container's attributes change
-    swiper.wrapperEl.style.setProperty('--slider-bleed-left', Math.max(0, Math.round(r.left)) + 'px');
-    swiper.wrapperEl.style.setProperty('--slider-bleed-right', Math.max(0, Math.round(vw - r.right)) + 'px');
-  }
-
-  // Run once the scroll area has stopped moving (no scroll events for 120ms, at most 1.5s)
-  function onScrollEnd(scroller, fn) {
-    let finished = false;
-    let t = setTimeout(done, 160);
-    const cap = setTimeout(done, 1500);
-    function onScroll() { clearTimeout(t); t = setTimeout(done, 120); }
-    function done() {
-      if (finished) return;
-      finished = true;
-      clearTimeout(t);
-      clearTimeout(cap);
-      scroller.removeEventListener('scroll', onScroll);
-      fn();
-    }
-    scroller.addEventListener('scroll', onScroll, { passive: true });
-  }
-
-  // Mouse: drag the cards; on release they glide a little and settle on the nearest card
-  function enableMouseDrag(swiper) {
-    const scroller = swiper.wrapperEl;
-    let drag = null;
-    let suppressClick = false;
-
-    scroller.addEventListener('dragstart', (e) => e.preventDefault());
-
-    scroller.addEventListener('pointerdown', (e) => {
-      if (e.pointerType !== 'mouse' || e.button !== 0) return;
-      if (e.target.closest('input, textarea, select, button')) return;
-      e.preventDefault(); // no text selection while dragging
-      drag = { id: e.pointerId, x: e.clientX, left: scroller.scrollLeft, moved: false, samples: [[e.timeStamp, e.clientX]] };
-    });
-
-    window.addEventListener('pointermove', (e) => {
-      if (!drag || e.pointerId !== drag.id) return;
-      if (e.buttons === 0) { release(e); return; } // button released outside the window
-      const dx = e.clientX - drag.x;
-      if (!drag.moved) {
-        if (Math.abs(dx) < 5) return;
-        drag.moved = true;
-        scroller.setAttribute('data-slider-dragging', '');
-      }
-      scroller.scrollLeft = drag.left - dx;
-      drag.samples.push([e.timeStamp, e.clientX]);
-      if (drag.samples.length > 8) drag.samples.shift();
-    });
-
-    function release(e) {
-      if (!drag || e.pointerId !== drag.id) return;
-      const d = drag;
-      drag = null;
-      if (!d.moved) return;
-      suppressClick = true;
-      setTimeout(() => { suppressClick = false; }, 50);
-
-      // Speed over the last ~100ms of the drag (px per ms)
-      const last = d.samples[d.samples.length - 1];
-      const first = d.samples.find((s) => last[0] - s[0] <= 100) || last;
-      const dt = last[0] - first[0];
-      const velocity = dt > 0 && e.timeStamp - last[0] < 80 ? (last[1] - first[1]) / dt : 0;
-      const target = scroller.scrollLeft - velocity * 140;
-
-      // Nearest card to where the glide would end
-      const grid = swiper.snapGrid;
-      let index = 0;
-      grid.forEach((pos, i) => { if (Math.abs(pos - target) < Math.abs(grid[index] - target)) index = i; });
-      if (Math.abs(scroller.scrollLeft - grid[index]) < 1) {
-        // Already on that card: nothing will scroll
-        scroller.removeAttribute('data-slider-dragging');
-        return;
-      }
-      onScrollEnd(scroller, () => { if (!drag) scroller.removeAttribute('data-slider-dragging'); });
-      scroller.scrollTo({ left: grid[index], behavior: 'smooth' });
-    }
-    window.addEventListener('pointerup', release);
-    window.addEventListener('pointercancel', release);
-
-    scroller.addEventListener('click', (e) => {
-      if (!suppressClick) return;
-      e.preventDefault();
-      e.stopPropagation();
-    }, true);
-  }
+  const isDesktop = window.innerWidth >= 992;
 
   swiperElements.forEach((swiperElement) => {
     try {
@@ -1039,28 +945,39 @@
 
       // Disable loop on mobile
       const useLoop = isMobile ? false : attributes.loop;
-      // Native scrolling supports the plain sliding effect only (all sliders today)
-      const nativeScroll = attributes.effect === 'slide' && !useLoop;
 
       // Initialize Swiper
       const swiper = new Swiper(swiperElement.querySelector('.swiper'), {
         loop: useLoop,
-        speed: attributes.speed,
+        // Swiper's default 300ms: also the snap after a drag, where 750ms felt sluggish
+        speed: 300,
         initialSlide: isMobile ? 0 : attributes.initialSlide,
         effect: attributes.effect,
-        // Native scrolling; snapping comes from the page_code_sliders CSS
-        cssMode: nativeScroll,
+        grabCursor: false,
         centeredSlides: isMobile ? false : attributes.centeredSlides,
         spaceBetween: attributes.spaceBetween,
 
-        // In CSS mode every Swiper update() snaps the scroll to the active card, which
-        // cut swipes off: DOM observers fired on Lenis classes on <html> and on the
-        // offset-swapped class below, the size observer on lazy images changing the
-        // height. The slides don't change after load, so only window resizes update it.
-        observer: !nativeScroll,
-        observeParents: !nativeScroll,
-        observeSlideChildren: !nativeScroll,
-        resizeObserver: !nativeScroll,
+        // No DOM or size observers: they re-ran update() mid-swipe (Lenis classes on
+        // <html>, the offset-swapped class below, lazy images changing the height),
+        // which snaps a slider back to its active card. The slides don't change after
+        // load; Swiper still updates on window resize.
+        observer: false,
+        observeParents: false,
+        observeSlideChildren: false,
+        resizeObserver: false,
+
+        // Desktop: drag glides with Swiper's default momentum, then settles on a card
+        freeMode: isDesktop ? {
+          enabled: true,
+          sticky: true
+        } : false,
+
+        // Trackpad: sideways swipes move the slider, vertical scrolling stays with the page
+        mousewheel: {
+          sensitivity: 1,
+          releaseOnEdges: true,
+          forceToAxis: true
+        },
 
         // Fade effect settings
         fadeEffect: attributes.effect === 'fade' ? {
@@ -1116,16 +1033,23 @@
               this.el.classList.toggle('offset-swapped');
             }
           },
+          // Closed hand while dragging; links in the cards keep their pointer at rest
+          touchStart: function () {
+            this.wrapperEl.style.cursor = 'grabbing';
+          },
+          sliderMove: function () {
+            this.wrapperEl.style.cursor = 'grabbing';
+          },
+          touchEnd: function () {
+            this.wrapperEl.style.cursor = '';
+          },
           init: function () {
-            // In CSS mode update() would run before the browser reports the initial
-            // scroll position and jump back to the first card
-            if (!this.params.cssMode) this.update();
+            this.update();
             if (typeof ScrollTrigger !== 'undefined') {
               ScrollTrigger.refresh();
             }
           },
           imagesReady: function () {
-            if (!this.params.cssMode) this.update();
             if (typeof ScrollTrigger !== 'undefined') {
               ScrollTrigger.refresh();
             }
@@ -1138,17 +1062,10 @@
         }
       });
 
-      // Native scroll setup
-      if (nativeScroll) {
-        setBleed(swiper);
-        window.addEventListener('resize', () => setBleed(swiper));
-        new ResizeObserver(() => setBleed(swiper)).observe(swiper.el);
-        // Leave sideways trackpad gestures to the browser; Lenis checks this (see Lenis setup)
-        swiper.wrapperEl.addEventListener('wheel', (e) => {
-          if (Math.abs(e.deltaX) > Math.abs(e.deltaY)) swiper.wrapperEl.sliderGestureUntil = performance.now() + 250;
-        }, { passive: true });
-        if (finePointer) enableMouseDrag(swiper);
-      }
+      // Leave sideways trackpad gestures to the slider; Lenis checks this (see Lenis setup)
+      swiperElement.querySelector('.swiper').addEventListener('wheel', (e) => {
+        if (Math.abs(e.deltaX) > Math.abs(e.deltaY)) e.currentTarget.sliderGestureUntil = performance.now() + 250;
+      }, { passive: true });
 
       // Handle lazy-loaded images
       const images = swiperElement.querySelectorAll('img');
@@ -1162,7 +1079,6 @@
             img.addEventListener('load', () => {
               loadedImages++;
               if (loadedImages === images.length) {
-                if (!nativeScroll) swiper.update();
                 if (typeof ScrollTrigger !== 'undefined') {
                   ScrollTrigger.refresh();
                 }
@@ -1174,7 +1090,6 @@
         // If all images were already loaded
         if (loadedImages === images.length) {
           setTimeout(() => {
-            if (!nativeScroll) swiper.update();
             if (typeof ScrollTrigger !== 'undefined') {
               ScrollTrigger.refresh();
             }

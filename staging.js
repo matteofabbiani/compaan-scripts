@@ -17,6 +17,32 @@
 })();
 
 /* ============================================================
+   = LIBRARIES ON DEMAND                                       =
+   ============================================================ */
+// Swiper and hls.js load only on pages that use them. If the page already has a
+// copy (older footer code), that copy is used.
+const loadLibrary = (function () {
+  const urls = {
+    Swiper: 'https://cdn.jsdelivr.net/npm/swiper@11.2.10/swiper-bundle.min.js',
+    Hls: 'https://cdn.jsdelivr.net/npm/hls.js@1.6.11/dist/hls.min.js'
+  };
+  const pending = {};
+  return function (name) {
+    if (window[name]) return Promise.resolve(window[name]);
+    if (!pending[name]) {
+      pending[name] = new Promise((resolve, reject) => {
+        const script = document.createElement('script');
+        script.src = urls[name];
+        script.onload = () => resolve(window[name]);
+        script.onerror = () => reject(new Error('Could not load ' + name));
+        document.head.appendChild(script);
+      });
+    }
+    return pending[name];
+  };
+})();
+
+/* ============================================================
    = SITE WIDE, LENIS SMOOTH SCROLL, PARALLAX SETUP          =
    ============================================================ */
 // Site-wide: Lenis Smooth Scroll & Parallax Setup
@@ -198,7 +224,12 @@
             this.readyIfIdle(player, pendingPlay);
           }, { once: true });
         } else if (canUseHlsJs) {
-          const hls = new window.Hls({ maxBufferLength: 10 });
+          const hls = new window.Hls({
+            maxBufferLength: 10,
+            // Start from a 5 Mbps estimate instead of hls.js's 0.5 Mbps, so the first
+            // seconds play at 720p rather than 240p; it adapts from there
+            abrEwmaDefaultEstimate: 5000000
+          });
           hls.attachMedia(video);
           hls.on(window.Hls.Events.MEDIA_ATTACHED, () => {
             hls.loadSource(src);
@@ -333,7 +364,12 @@
   }
 
   // Initialize
-  new BunnyPlayerBackground();
+  if (!document.querySelector('[data-bunny-background-init]')) return;
+  // Safari plays HLS natively; other browsers need hls.js
+  const nativeHls = !!document.createElement('video').canPlayType('application/vnd.apple.mpegurl');
+  (nativeHls ? Promise.resolve() : loadLibrary('Hls'))
+    .catch((error) => console.error(error))
+    .then(() => new BunnyPlayerBackground());
 })();
 
 /* ============================================================
@@ -673,120 +709,6 @@
 })();
 
 /* ============================================================
-   = LEGACY: NAVIGATION THEME SWITCHING WITH SCROLLTRIGGER     =
-   ============================================================ */
-// Navigation Theme Switching with ScrollTrigger
-(function () {
-  // LEGACY (old navbar markup): does nothing once the navbar carries data-nav.
-  // Remove after the navbar release is live; NAVIGATION below replaces it.
-  if (document.querySelector('[data-nav]')) return;
-  // Function to initialize nav theme switching
-  function initNavTheme() {
-    const nav = document.querySelector('.nav');
-    if (!nav) return false; // Return false if nav not found yet
-
-    // Set nav theme function
-    function setNavTheme(theme) {
-      nav.classList.remove('theme-light', 'theme-dark');
-      nav.classList.add(`theme-${theme}`);
-    }
-
-    // Get initial nav theme from body attribute, or fall back to existing class
-    const dataNavTheme = document.body.getAttribute('data-nav-initial-theme');
-    const initialNavTheme = dataNavTheme ? dataNavTheme :
-      (nav.classList.contains('theme-dark') ? 'dark' :
-        nav.classList.contains('theme-light') ? 'light' :
-        'light'); // default
-
-    // Apply initial nav theme immediately
-    setNavTheme(initialNavTheme);
-
-    // Setup nav theme switches
-    const navTriggers = document.querySelectorAll('[data-nav-theme]');
-    const scrollTriggerInstances = [];
-
-    navTriggers.forEach((trigger, index) => {
-      const targetNavTheme = trigger.getAttribute('data-nav-theme');
-      const navSwitchAt = trigger.getAttribute('data-nav-theme-at') || 'top top';
-
-      const st = ScrollTrigger.create({
-        trigger: trigger,
-        start: navSwitchAt,
-        markers: false, // Set to true for debugging
-        onEnter: () => {
-          setNavTheme(targetNavTheme);
-        },
-        onLeaveBack: () => {
-          const previousNavTriggers = Array.from(navTriggers).slice(0, index);
-
-          if (previousNavTriggers.length > 0) {
-            const previousNavTheme = previousNavTriggers[previousNavTriggers.length - 1]
-              .getAttribute('data-nav-theme');
-            setNavTheme(previousNavTheme);
-          } else {
-            setNavTheme(initialNavTheme);
-          }
-        }
-      });
-
-      scrollTriggerInstances.push({ st, theme: targetNavTheme, index });
-    });
-
-    // Function to check which theme should be active
-    function checkActiveTheme() {
-      // Refresh to ensure positions are calculated
-      ScrollTrigger.refresh();
-
-      // Wait a bit for refresh to complete
-      requestAnimationFrame(() => {
-        let activeNavTheme = initialNavTheme;
-
-        // Sort triggers by their start position
-        const sortedTriggers = [...scrollTriggerInstances].sort((a, b) => a.st.start - b.st
-          .start);
-
-        // Find the last trigger we've scrolled past
-        sortedTriggers.forEach(({ st, theme }) => {
-          if (window.scrollY >= st.start) {
-            activeNavTheme = theme;
-          }
-        });
-
-        setNavTheme(activeNavTheme);
-      });
-    }
-
-    // Check on initial load - multiple attempts to ensure it works
-    setTimeout(checkActiveTheme, 100);
-    setTimeout(checkActiveTheme, 300);
-    setTimeout(checkActiveTheme, 500);
-
-    // Also check on window load
-    window.addEventListener('load', () => {
-      setTimeout(checkActiveTheme, 100);
-    });
-
-    return true; // Return true if successfully initialized
-  }
-
-  // Try to initialize immediately
-  if (!initNavTheme()) {
-    // If nav not found, wait for it with MutationObserver
-    const observer = new MutationObserver((mutations, obs) => {
-      if (initNavTheme()) {
-        obs.disconnect(); // Stop observing once initialized
-      }
-    });
-
-    // Start observing the document with the configured parameters
-    observer.observe(document.documentElement, {
-      childList: true,
-      subtree: true
-    });
-  }
-})();
-
-/* ============================================================
    = MARQUEE ANIMATION WITH SCROLL DIRECTION                  =
    ============================================================ */
 // Marquee animation with scroll direction
@@ -894,223 +816,228 @@
   const isMobile = window.innerWidth < 768;
   const isDesktop = window.innerWidth >= 992;
 
-  swiperElements.forEach((swiperElement) => {
-    try {
-      // Get attributes
-      const attributes = {
-        effect: swiperElement.getAttribute('mf-swiper-effect') || 'slide',
-        crossFade: swiperElement.getAttribute('mf-swiper-fade-crossfade') === 'true',
-        loop: swiperElement.getAttribute('mf-swiper-loop') === 'true',
-        speed: parseInt(swiperElement.getAttribute('mf-swiper-speed')) || 700,
-        initialSlide: parseInt(swiperElement.getAttribute('mf-swiper-initial-slide')) || 0,
-        grabCursor: swiperElement.getAttribute('mf-swiper-grab-cursor') === 'true',
-        centeredSlides: swiperElement.getAttribute('mf-swiper-centered-slides') === 'true',
-        spaceBetween: parseInt(swiperElement.getAttribute('mf-swiper-space-between')) || 20,
-        autoplay: swiperElement.getAttribute('mf-swiper-autoplay') === 'true',
-        autoplayDelay: parseInt(swiperElement.getAttribute('mf-swiper-autoplay-delay')) ||
-          3000,
-        pagination: swiperElement.getAttribute('mf-swiper-pagination') === 'true',
-        paginationEl: swiperElement.getAttribute('mf-swiper-pagination-el'),
-        paginationType: swiperElement.getAttribute('mf-swiper-pagination-type') ||
-          'bullets',
-        paginationDynamicBullets: swiperElement.getAttribute(
-          'mf-swiper-pagination-dynamic-bullets') === 'true',
-        paginationBulletClass: swiperElement.getAttribute(
-          'mf-swiper-pagination-bullet-class') || 'swiper_bullet',
-        paginationBulletActiveClass: swiperElement.getAttribute(
-          'mf-swiper-pagination-bullet-active-class') || 'swiper_bullet-active',
-        navigationNextEl: swiperElement.getAttribute('mf-swiper-navigation-next-el'),
-        navigationPrevEl: swiperElement.getAttribute('mf-swiper-navigation-prev-el'),
-        mobileSlidesPerView: parseFloat(swiperElement.getAttribute(
-          'mf-swiper-mobile-slides-per-view')) || 1,
-        mobileSpaceBetween: parseInt(swiperElement.getAttribute(
-          'mf-swiper-mobile-space-between')) || 10,
-        tabletSlidesPerView: parseFloat(swiperElement.getAttribute(
-          'mf-swiper-tablet-slides-per-view')) || 2,
-        tabletSpaceBetween: parseInt(swiperElement.getAttribute(
-          'mf-swiper-tablet-space-between')) || 15,
-        desktopSlidesPerView: parseFloat(swiperElement.getAttribute(
-          'mf-swiper-desktop-slides-per-view')) || 3,
-        desktopSpaceBetween: parseInt(swiperElement.getAttribute(
-          'mf-swiper-desktop-space-between')) || 20
-      };
+  if (!swiperElements.length) return;
+  loadLibrary('Swiper').then(initSwipers, (error) => console.error(error));
 
-      // Find navigation and pagination elements
-      const nextEl = attributes.navigationNextEl ?
-        swiperElement.querySelector(`.${attributes.navigationNextEl}`) : null;
-      const prevEl = attributes.navigationPrevEl ?
-        swiperElement.querySelector(`.${attributes.navigationPrevEl}`) : null;
-      const paginationEl = attributes.pagination ?
-        swiperElement.querySelector(`.${attributes.paginationEl}`) : null;
+  function initSwipers() {
+    swiperElements.forEach((swiperElement) => {
+      try {
+        // Get attributes
+        const attributes = {
+          effect: swiperElement.getAttribute('mf-swiper-effect') || 'slide',
+          crossFade: swiperElement.getAttribute('mf-swiper-fade-crossfade') === 'true',
+          loop: swiperElement.getAttribute('mf-swiper-loop') === 'true',
+          speed: parseInt(swiperElement.getAttribute('mf-swiper-speed')) || 700,
+          initialSlide: parseInt(swiperElement.getAttribute('mf-swiper-initial-slide')) || 0,
+          grabCursor: swiperElement.getAttribute('mf-swiper-grab-cursor') === 'true',
+          centeredSlides: swiperElement.getAttribute('mf-swiper-centered-slides') === 'true',
+          spaceBetween: parseInt(swiperElement.getAttribute('mf-swiper-space-between')) || 20,
+          autoplay: swiperElement.getAttribute('mf-swiper-autoplay') === 'true',
+          autoplayDelay: parseInt(swiperElement.getAttribute('mf-swiper-autoplay-delay')) ||
+            3000,
+          pagination: swiperElement.getAttribute('mf-swiper-pagination') === 'true',
+          paginationEl: swiperElement.getAttribute('mf-swiper-pagination-el'),
+          paginationType: swiperElement.getAttribute('mf-swiper-pagination-type') ||
+            'bullets',
+          paginationDynamicBullets: swiperElement.getAttribute(
+            'mf-swiper-pagination-dynamic-bullets') === 'true',
+          paginationBulletClass: swiperElement.getAttribute(
+            'mf-swiper-pagination-bullet-class') || 'swiper_bullet',
+          paginationBulletActiveClass: swiperElement.getAttribute(
+            'mf-swiper-pagination-bullet-active-class') || 'swiper_bullet-active',
+          navigationNextEl: swiperElement.getAttribute('mf-swiper-navigation-next-el'),
+          navigationPrevEl: swiperElement.getAttribute('mf-swiper-navigation-prev-el'),
+          mobileSlidesPerView: parseFloat(swiperElement.getAttribute(
+            'mf-swiper-mobile-slides-per-view')) || 1,
+          mobileSpaceBetween: parseInt(swiperElement.getAttribute(
+            'mf-swiper-mobile-space-between')) || 10,
+          tabletSlidesPerView: parseFloat(swiperElement.getAttribute(
+            'mf-swiper-tablet-slides-per-view')) || 2,
+          tabletSpaceBetween: parseInt(swiperElement.getAttribute(
+            'mf-swiper-tablet-space-between')) || 15,
+          desktopSlidesPerView: parseFloat(swiperElement.getAttribute(
+            'mf-swiper-desktop-slides-per-view')) || 3,
+          desktopSpaceBetween: parseInt(swiperElement.getAttribute(
+            'mf-swiper-desktop-space-between')) || 20
+        };
 
-      // Disable loop on mobile
-      const useLoop = isMobile ? false : attributes.loop;
+        // Find navigation and pagination elements
+        const nextEl = attributes.navigationNextEl ?
+          swiperElement.querySelector(`.${attributes.navigationNextEl}`) : null;
+        const prevEl = attributes.navigationPrevEl ?
+          swiperElement.querySelector(`.${attributes.navigationPrevEl}`) : null;
+        const paginationEl = attributes.pagination ?
+          swiperElement.querySelector(`.${attributes.paginationEl}`) : null;
 
-      // Initialize Swiper
-      const swiper = new Swiper(swiperElement.querySelector('.swiper'), {
-        loop: useLoop,
-        // Swiper's default 300ms: also the snap after a drag, where 750ms felt sluggish
-        speed: 300,
-        initialSlide: isMobile ? 0 : attributes.initialSlide,
-        effect: attributes.effect,
-        grabCursor: false,
-        // Listen on the whole slider, so a drag that starts in the gap between two
-        // cards works too (the moving strip doesn't cover those gaps once it has moved)
-        touchEventsTarget: 'container',
-        centeredSlides: isMobile ? false : attributes.centeredSlides,
-        spaceBetween: attributes.spaceBetween,
+        // Disable loop on mobile
+        const useLoop = isMobile ? false : attributes.loop;
 
-        // No DOM or size observers: they re-ran update() mid-swipe (Lenis classes on
-        // <html>, the offset-swapped class below, lazy images changing the height),
-        // which snaps a slider back to its active card. The slides don't change after
-        // load; Swiper still updates on window resize.
-        observer: false,
-        observeParents: false,
-        observeSlideChildren: false,
-        resizeObserver: false,
+        // Initialize Swiper
+        const swiper = new Swiper(swiperElement.querySelector('.swiper'), {
+          loop: useLoop,
+          // Swiper's default 300ms: also the snap after a drag, where 750ms felt sluggish
+          speed: 300,
+          initialSlide: isMobile ? 0 : attributes.initialSlide,
+          effect: attributes.effect,
+          grabCursor: false,
+          // Listen on the whole slider, so a drag that starts in the gap between two
+          // cards works too (the moving strip doesn't cover those gaps once it has moved)
+          touchEventsTarget: 'container',
+          centeredSlides: isMobile ? false : attributes.centeredSlides,
+          spaceBetween: attributes.spaceBetween,
 
-        // Desktop: drag glides with Swiper's default momentum, then settles on a card
-        freeMode: isDesktop ? {
-          enabled: true,
-          sticky: true
-        } : false,
+          // No DOM or size observers: they re-ran update() mid-swipe (Lenis classes on
+          // <html>, the offset-swapped class below, lazy images changing the height),
+          // which snaps a slider back to its active card. The slides don't change after
+          // load; Swiper still updates on window resize.
+          observer: false,
+          observeParents: false,
+          observeSlideChildren: false,
+          resizeObserver: false,
 
-        // Trackpad: sideways swipes move the slider, vertical scrolling stays with the page
-        mousewheel: {
-          sensitivity: 1,
-          releaseOnEdges: true,
-          forceToAxis: true
-        },
+          // Desktop: drag glides with Swiper's default momentum, then settles on a card
+          freeMode: isDesktop ? {
+            enabled: true,
+            sticky: true
+          } : false,
 
-        // Fade effect settings
-        fadeEffect: attributes.effect === 'fade' ? {
-          crossFade: attributes.crossFade
-        } : {},
-
-        // Autoplay (disable on mobile for free mode)
-        autoplay: (attributes.autoplay && !isMobile) ? {
-          delay: attributes.autoplayDelay,
-          disableOnInteraction: false
-        } : false,
-
-        // Pagination with custom classes
-        pagination: paginationEl ? {
-          el: paginationEl,
-          clickable: true,
-          type: attributes.paginationType,
-          dynamicBullets: attributes.paginationDynamicBullets,
-          bulletClass: attributes.paginationBulletClass,
-          bulletActiveClass: attributes.paginationBulletActiveClass
-        } : false,
-
-        // Navigation
-        navigation: {
-          nextEl: nextEl || null,
-          prevEl: prevEl || null,
-          // Webflow class (kept by a hidden placeholder in each slider); the
-          // mf-swiper-navigation-disabled-class attribute names a class that does not exist
-          disabledClass: 'swiper_button-disable'
-        },
-
-        // Responsive breakpoints (no freeMode here, handled above)
-        breakpoints: {
-          0: {
-            slidesPerView: attributes.mobileSlidesPerView,
-            spaceBetween: attributes.mobileSpaceBetween
+          // Trackpad: sideways swipes move the slider, vertical scrolling stays with the page
+          mousewheel: {
+            sensitivity: 1,
+            releaseOnEdges: true,
+            forceToAxis: true
           },
-          768: {
-            slidesPerView: attributes.tabletSlidesPerView,
-            spaceBetween: attributes.tabletSpaceBetween
-          },
-          992: {
-            slidesPerView: attributes.desktopSlidesPerView,
-            spaceBetween: attributes.desktopSpaceBetween
-          }
-        },
 
-        // Event handlers
-        on: {
-          slideChange: function () {
-            // Only toggle offset on desktop (skip on mobile to avoid glitches)
-            if (!isMobile) {
-              this.el.classList.toggle('offset-swapped');
+          // Fade effect settings
+          fadeEffect: attributes.effect === 'fade' ? {
+            crossFade: attributes.crossFade
+          } : {},
+
+          // Autoplay (disable on mobile for free mode)
+          autoplay: (attributes.autoplay && !isMobile) ? {
+            delay: attributes.autoplayDelay,
+            disableOnInteraction: false
+          } : false,
+
+          // Pagination with custom classes
+          pagination: paginationEl ? {
+            el: paginationEl,
+            clickable: true,
+            type: attributes.paginationType,
+            dynamicBullets: attributes.paginationDynamicBullets,
+            bulletClass: attributes.paginationBulletClass,
+            bulletActiveClass: attributes.paginationBulletActiveClass
+          } : false,
+
+          // Navigation
+          navigation: {
+            nextEl: nextEl || null,
+            prevEl: prevEl || null,
+            // Webflow class (kept by a hidden placeholder in each slider); the
+            // mf-swiper-navigation-disabled-class attribute names a class that does not exist
+            disabledClass: 'swiper_button-disable'
+          },
+
+          // Responsive breakpoints (no freeMode here, handled above)
+          breakpoints: {
+            0: {
+              slidesPerView: attributes.mobileSlidesPerView,
+              spaceBetween: attributes.mobileSpaceBetween
+            },
+            768: {
+              slidesPerView: attributes.tabletSlidesPerView,
+              spaceBetween: attributes.tabletSpaceBetween
+            },
+            992: {
+              slidesPerView: attributes.desktopSlidesPerView,
+              spaceBetween: attributes.desktopSpaceBetween
             }
           },
-          // Closed hand while dragging; links in the cards keep their pointer at rest
-          touchStart: function () {
-            this.el.style.cursor = 'grabbing';
-          },
-          sliderMove: function () {
-            this.el.style.cursor = 'grabbing';
-          },
-          touchEnd: function () {
-            this.el.style.cursor = '';
-          },
-          init: function () {
-            this.update();
-            if (typeof ScrollTrigger !== 'undefined') {
-              ScrollTrigger.refresh();
-            }
-          },
-          imagesReady: function () {
-            if (typeof ScrollTrigger !== 'undefined') {
-              ScrollTrigger.refresh();
-            }
-          },
-          update: function () {
-            if (typeof ScrollTrigger !== 'undefined') {
-              ScrollTrigger.refresh();
-            }
-          }
-        }
-      });
 
-      // Leave sideways trackpad gestures to the slider; Lenis checks this (see Lenis setup)
-      swiperElement.querySelector('.swiper').addEventListener('wheel', (e) => {
-        if (Math.abs(e.deltaX) > Math.abs(e.deltaY)) e.currentTarget.sliderGestureUntil = performance.now() + 250;
-      }, { passive: true });
-
-      // Handle lazy-loaded images
-      const images = swiperElement.querySelectorAll('img');
-      let loadedImages = 0;
-
-      if (images.length > 0) {
-        images.forEach(img => {
-          if (img.complete) {
-            loadedImages++;
-          } else {
-            img.addEventListener('load', () => {
-              loadedImages++;
-              if (loadedImages === images.length) {
-                if (typeof ScrollTrigger !== 'undefined') {
-                  ScrollTrigger.refresh();
-                }
+          // Event handlers
+          on: {
+            slideChange: function () {
+              // Only toggle offset on desktop (skip on mobile to avoid glitches)
+              if (!isMobile) {
+                this.el.classList.toggle('offset-swapped');
               }
-            });
+            },
+            // Closed hand while dragging; links in the cards keep their pointer at rest
+            touchStart: function () {
+              this.el.style.cursor = 'grabbing';
+            },
+            sliderMove: function () {
+              this.el.style.cursor = 'grabbing';
+            },
+            touchEnd: function () {
+              this.el.style.cursor = '';
+            },
+            init: function () {
+              this.update();
+              if (typeof ScrollTrigger !== 'undefined') {
+                ScrollTrigger.refresh();
+              }
+            },
+            imagesReady: function () {
+              if (typeof ScrollTrigger !== 'undefined') {
+                ScrollTrigger.refresh();
+              }
+            },
+            update: function () {
+              if (typeof ScrollTrigger !== 'undefined') {
+                ScrollTrigger.refresh();
+              }
+            }
           }
         });
 
-        // If all images were already loaded
-        if (loadedImages === images.length) {
-          setTimeout(() => {
-            if (typeof ScrollTrigger !== 'undefined') {
-              ScrollTrigger.refresh();
+        // Leave sideways trackpad gestures to the slider; Lenis checks this (see Lenis setup)
+        swiperElement.querySelector('.swiper').addEventListener('wheel', (e) => {
+          if (Math.abs(e.deltaX) > Math.abs(e.deltaY)) e.currentTarget.sliderGestureUntil = performance.now() + 250;
+        }, { passive: true });
+
+        // Handle lazy-loaded images
+        const images = swiperElement.querySelectorAll('img');
+        let loadedImages = 0;
+
+        if (images.length > 0) {
+          images.forEach(img => {
+            if (img.complete) {
+              loadedImages++;
+            } else {
+              img.addEventListener('load', () => {
+                loadedImages++;
+                if (loadedImages === images.length) {
+                  if (typeof ScrollTrigger !== 'undefined') {
+                    ScrollTrigger.refresh();
+                  }
+                }
+              });
             }
-          }, 100);
+          });
+
+          // If all images were already loaded
+          if (loadedImages === images.length) {
+            setTimeout(() => {
+              if (typeof ScrollTrigger !== 'undefined') {
+                ScrollTrigger.refresh();
+              }
+            }, 100);
+          }
         }
+
+      } catch (error) {
+        console.error('Error initializing Swiper:', error);
       }
+    });
 
-    } catch (error) {
-      console.error('Error initializing Swiper:', error);
-    }
-  });
-
-  // Global refresh after all swipers are initialized
-  setTimeout(() => {
-    if (typeof ScrollTrigger !== 'undefined') {
-      ScrollTrigger.refresh();
-    }
-  }, 500);
+    // Global refresh after all swipers are initialized
+    setTimeout(() => {
+      if (typeof ScrollTrigger !== 'undefined') {
+        ScrollTrigger.refresh();
+      }
+    }, 500);
+  }
 })();
 
 /* ============================================================
@@ -1291,59 +1218,6 @@
     resizeTimer = setTimeout(() => {
       requestAnimationFrame(moveButtons);
     }, 150);
-  });
-})();
-
-/* ============================================================
-   = LEGACY: NAVBAR BUTTONS INTO THE MOBILE MENU               =
-   ============================================================ */
-// Moves the two navbar buttons into the mobile menu list at 767px and below.
-(function () {
-  // LEGACY (old navbar markup): does nothing once the navbar carries data-nav.
-  // Remove after the navbar release is live; NAVIGATION below replaces it.
-  if (document.querySelector('[data-nav]')) return;
-  const MOBILE_LANDSCAPE_BREAKPOINT = 767; // Webflow mobile landscape down
-  const navbarButtons = document.querySelectorAll('.button.is-navbar');
-  const originalPositions = new WeakMap();
-  navbarButtons.forEach(button => {
-    originalPositions.set(button, { parent: button.parentElement, nextSibling: button.nextSibling });
-  });
-
-  function moveButtons() {
-    if (window.innerWidth <= MOBILE_LANDSCAPE_BREAKPOINT) {
-      const navCenterList = document.querySelector('.nav-center__list');
-      if (!navCenterList) return;
-      navbarButtons.forEach(button => {
-        if (button.parentElement !== navCenterList) {
-          const li = document.createElement('li');
-          li.className = 'nav-center__list-item';
-          li.style.setProperty('padding-left', '1.25rem', 'important');
-          li.style.setProperty('padding-right', '1.25rem', 'important');
-          li.appendChild(button);
-          navCenterList.appendChild(li);
-          originalPositions.get(button).liWrapper = li;
-        }
-      });
-    } else {
-      navbarButtons.forEach(button => {
-        const original = originalPositions.get(button);
-        if (original && button.parentElement !== original.parent) {
-          if (original.liWrapper && original.liWrapper.parentElement) original.liWrapper.remove();
-          if (original.nextSibling && original.nextSibling.parentElement === original.parent) {
-            original.parent.insertBefore(button, original.nextSibling);
-          } else {
-            original.parent.appendChild(button);
-          }
-        }
-      });
-    }
-  }
-
-  moveButtons();
-  let resizeTimer;
-  window.addEventListener('resize', () => {
-    clearTimeout(resizeTimer);
-    resizeTimer = setTimeout(() => requestAnimationFrame(moveButtons), 150);
   });
 })();
 
@@ -1944,125 +1818,6 @@
 
 
 /* ============================================================
-   = LEGACY: NAV DROPDOWN BACKGROUND GROWS WITH ITS CONTENT      =
-   ============================================================ */
-// The navbar embed gives the dropdown background a fixed height (--nav-bg-height).
-// When a dropdown is taller (tablet widths, more rooms) its cards spilled past it.
-// From 768px up, raise the height to fit the open dropdown; never lower it.
-// On short windows the background stops at the window edge and the dropdown
-// scrolls inside itself instead (Lenis is told to leave that scroll alone).
-(function () {
-  // LEGACY (old navbar markup): does nothing once the navbar carries data-nav.
-  // Remove after the navbar release is live; NAVIGATION below replaces it.
-  if (document.querySelector('[data-nav]')) return;
-  const root = document.documentElement;
-  const bg = document.querySelector('.nav-bg');
-  const toggles = document.querySelectorAll('[data-dropdown-toggle]');
-  if (!bg || !toggles.length) return;
-
-  const desktop = window.matchMedia('(min-width: 768px)');
-  const SPACE_BELOW = 48;
-
-  function baseHeight() {
-    const probe = document.createElement('div');
-    probe.style.cssText = 'position:absolute;visibility:hidden;pointer-events:none;height:var(--nav-bg-height)';
-    bg.parentElement.appendChild(probe);
-    const h = probe.offsetHeight;
-    probe.remove();
-    return h;
-  }
-
-  function reset(dropdown) {
-    dropdown.style.removeProperty('max-height');
-    dropdown.style.removeProperty('overflow-y');
-    dropdown.removeAttribute('data-lenis-prevent');
-  }
-
-  function fit(toggle) {
-    root.style.removeProperty('--nav-bg-height');
-    const dropdown = toggle.nextElementSibling;
-    if (!dropdown) return;
-    reset(dropdown);
-    if (!desktop.matches) return;
-    const content = dropdown.querySelector('.nav-dropdown__outer-group-wrapper') || dropdown;
-    const bgTop = bg.getBoundingClientRect().top;
-    const windowRoom = window.innerHeight - bgTop;
-    const needed = Math.min(content.getBoundingClientRect().bottom - bgTop + SPACE_BELOW, windowRoom);
-    if (needed > baseHeight()) root.style.setProperty('--nav-bg-height', Math.ceil(needed) + 'px');
-
-    // Taller than the window: let the dropdown scroll inside itself
-    const top = dropdown.getBoundingClientRect().top;
-    if (top + dropdown.scrollHeight > window.innerHeight) {
-      dropdown.style.maxHeight = Math.floor(window.innerHeight - top) + 'px';
-      dropdown.style.overflowY = 'auto';
-      dropdown.setAttribute('data-lenis-prevent', '');
-    }
-  }
-
-  function openToggle() {
-    return Array.from(toggles).find((t) => t.dataset.dropdownToggle === 'open');
-  }
-
-  // The navbar script marks the active toggle with data-dropdown-toggle="open"
-  const observer = new MutationObserver(() => {
-    const open = openToggle();
-    if (!open) return;
-    requestAnimationFrame(() => fit(open));
-    setTimeout(() => fit(open), 500); // again once the opening transition has settled
-  });
-  toggles.forEach((t) => observer.observe(t, { attributes: true, attributeFilter: ['data-dropdown-toggle'] }));
-
-  let resizeTimer;
-  window.addEventListener('resize', () => {
-    clearTimeout(resizeTimer);
-    resizeTimer = setTimeout(() => {
-      const open = openToggle();
-      if (open) fit(open);
-      else root.style.removeProperty('--nav-bg-height');
-      if (!desktop.matches) toggles.forEach((t) => t.nextElementSibling && reset(t.nextElementSibling));
-    }, 150);
-  });
-})();
-
-/* ============================================================
-   = LEGACY: MEETING ROOM GRID IN THE NAV: EVEN ROWS             =
-   ============================================================ */
-// Webflow's grid (auto-fit, min 11rem) fills a row and leaves the rest alone on
-// the next one (5 + 1). From 992px up, pick the column count that keeps cards
-// readable and splits the rooms into even rows (3 + 3, 4 + 3, ...).
-(function () {
-  // LEGACY (old navbar markup): does nothing once the navbar carries data-nav.
-  // Remove after the navbar release is live; NAVIGATION below replaces it.
-  if (document.querySelector('[data-nav]')) return;
-  const list = document.querySelector('.nav-dropdown__content.is-meeting-rooms');
-  if (!list) return;
-  const wide = window.matchMedia('(min-width: 992px)');
-  const MIN_CARD = 176; // 11rem: narrowest card where "1 tot 12 personen" stays on one line
-
-  function balance() {
-    list.style.removeProperty('grid-template-columns');
-    if (!wide.matches) return;
-    const count = list.children.length;
-    const width = list.getBoundingClientRect().width;
-    const gap = parseFloat(getComputedStyle(list).columnGap) || 0;
-    if (!count || !width) return;
-    const perRow = Math.max(1, Math.floor((width + gap) / (MIN_CARD + gap)));
-    const rows = Math.ceil(count / perRow);
-    const columns = Math.ceil(count / rows);
-    list.style.gridTemplateColumns = `repeat(${columns}, minmax(0, 1fr))`;
-  }
-
-  balance();
-  let resizeTimer;
-  window.addEventListener('resize', () => {
-    clearTimeout(resizeTimer);
-    resizeTimer = setTimeout(balance, 150);
-  });
-  // The list width is only known once the dropdown is laid out; re-run on open
-  document.querySelectorAll('[data-dropdown-toggle]').forEach((t) => t.addEventListener('mouseenter', balance));
-})();
-
-/* ============================================================
    = NAVIGATION                                                =
    ============================================================ */
 // Everything the navbar does, in one place. Elements are found by data-nav-*
@@ -2092,6 +1847,26 @@
   const toggles = Array.from(nav.querySelectorAll('[data-dropdown-toggle]'));
   const dropdownOf = (toggle) => toggle.nextElementSibling;
   const linksIn = (dropdown) => Array.from(dropdown.querySelectorAll('a[href]'));
+
+  /* ---------- Card images: loaded when the menu is first used ---------- */
+  // The navbar is on every page, so its card photos stay hidden (navbar CSS) until a
+  // visitor reaches for the menu or the page has loaded and is idle. Each photo then
+  // asks for the size of its card instead of the full screen width.
+  let imagesReady = false;
+  function loadCardImages() {
+    if (imagesReady) return;
+    imagesReady = true;
+    nav.querySelectorAll('[data-nav-dropdown] img').forEach((img) => {
+      const width = Math.round(img.parentElement.getBoundingClientRect().width);
+      if (width > 0) img.sizes = width + 'px';
+    });
+    nav.setAttribute('data-nav-images', 'ready');
+  }
+  nav.addEventListener('pointerenter', loadCardImages, { once: true });
+  nav.addEventListener('focusin', loadCardImages, { once: true });
+  const whenIdle = () => (window.requestIdleCallback || ((fn) => setTimeout(fn, 1500)))(loadCardImages, { timeout: 4000 });
+  if (document.readyState === 'complete') whenIdle();
+  else window.addEventListener('load', whenIdle, { once: true });
 
   /* ---------- Open / close ---------- */
 

@@ -237,7 +237,13 @@ const loadLibrary = (function () {
           hls.on(window.Hls.Events.MEDIA_ATTACHED, () => {
             hls.loadSource(src);
           });
-          hls.on(window.Hls.Events.MANIFEST_PARSED, () => {
+          hls.on(window.Hls.Events.MANIFEST_PARSED, (event, data) => {
+            // Phones: at most 720p (1080p streams ~8 Mbit/s; a phone screen doesn't need it)
+            if (window.matchMedia('(max-width: 767px)').matches) {
+              let cap = -1;
+              data.levels.forEach((level, i) => { if (level.height <= 720 && (cap < 0 || level.height > data.levels[cap].height)) cap = i; });
+              if (cap >= 0) hls.autoLevelCapping = cap;
+            }
             this.readyIfIdle(player, pendingPlay);
           });
           player._hls = hls;

@@ -898,6 +898,7 @@
   // Edge-to-edge scroll area: tell the CSS how far the slider sits from the screen edges
   function setBleed(swiper) {
     const r = swiper.el.getBoundingClientRect();
+    if (r.width === 0) return; // hidden: measured again when it gets a size
     const vw = document.documentElement.clientWidth;
     // Set on the scroll area: Swiper re-runs update() when the container's attributes change
     swiper.wrapperEl.style.setProperty('--slider-bleed-left', Math.max(0, Math.round(r.left)) + 'px');
@@ -938,6 +939,7 @@
 
     window.addEventListener('pointermove', (e) => {
       if (!drag || e.pointerId !== drag.id) return;
+      if (e.buttons === 0) { release(e); return; } // button released outside the window
       const dx = e.clientX - drag.x;
       if (!drag.moved) {
         if (Math.abs(dx) < 5) return;
@@ -973,7 +975,7 @@
         scroller.removeAttribute('data-slider-dragging');
         return;
       }
-      onScrollEnd(scroller, () => scroller.removeAttribute('data-slider-dragging'));
+      onScrollEnd(scroller, () => { if (!drag) scroller.removeAttribute('data-slider-dragging'); });
       scroller.scrollTo({ left: grid[index], behavior: 'smooth' });
     }
     window.addEventListener('pointerup', release);
@@ -1035,8 +1037,10 @@
       const paginationEl = attributes.pagination ?
         swiperElement.querySelector(`.${attributes.paginationEl}`) : null;
 
-      // Disable loop on mobile (loop + freeMode don't work together)
+      // Disable loop on mobile
       const useLoop = isMobile ? false : attributes.loop;
+      // Native scrolling supports the plain sliding effect only (all sliders today)
+      const nativeScroll = attributes.effect === 'slide' && !useLoop;
 
       // Initialize Swiper
       const swiper = new Swiper(swiperElement.querySelector('.swiper'), {
@@ -1045,17 +1049,18 @@
         initialSlide: isMobile ? 0 : attributes.initialSlide,
         effect: attributes.effect,
         // Native scrolling; snapping comes from the page_code_sliders CSS
-        cssMode: true,
+        cssMode: nativeScroll,
         centeredSlides: isMobile ? false : attributes.centeredSlides,
         spaceBetween: attributes.spaceBetween,
 
-        // No DOM observer: in CSS mode every observed change (Lenis classes on <html>,
-        // the offset-swapped class below) re-ran update() and snapped the scroll back
-        // mid-swipe. The slides don't change after load; size changes are still
-        // handled by Swiper's resize observer.
-        observer: false,
-        observeParents: false,
-        observeSlideChildren: false,
+        // In CSS mode every Swiper update() snaps the scroll to the active card, which
+        // cut swipes off: DOM observers fired on Lenis classes on <html> and on the
+        // offset-swapped class below, the size observer on lazy images changing the
+        // height. The slides don't change after load, so only window resizes update it.
+        observer: !nativeScroll,
+        observeParents: !nativeScroll,
+        observeSlideChildren: !nativeScroll,
+        resizeObserver: !nativeScroll,
 
         // Fade effect settings
         fadeEffect: attributes.effect === 'fade' ? {
@@ -1120,7 +1125,7 @@
             }
           },
           imagesReady: function () {
-            this.update();
+            if (!this.params.cssMode) this.update();
             if (typeof ScrollTrigger !== 'undefined') {
               ScrollTrigger.refresh();
             }
@@ -1134,13 +1139,16 @@
       });
 
       // Native scroll setup
-      setBleed(swiper);
-      window.addEventListener('resize', () => setBleed(swiper));
-      // Leave sideways trackpad gestures to the browser; Lenis checks this (see Lenis setup)
-      swiper.wrapperEl.addEventListener('wheel', (e) => {
-        if (Math.abs(e.deltaX) > Math.abs(e.deltaY)) swiper.wrapperEl.sliderGestureUntil = performance.now() + 250;
-      }, { passive: true });
-      if (finePointer) enableMouseDrag(swiper);
+      if (nativeScroll) {
+        setBleed(swiper);
+        window.addEventListener('resize', () => setBleed(swiper));
+        new ResizeObserver(() => setBleed(swiper)).observe(swiper.el);
+        // Leave sideways trackpad gestures to the browser; Lenis checks this (see Lenis setup)
+        swiper.wrapperEl.addEventListener('wheel', (e) => {
+          if (Math.abs(e.deltaX) > Math.abs(e.deltaY)) swiper.wrapperEl.sliderGestureUntil = performance.now() + 250;
+        }, { passive: true });
+        if (finePointer) enableMouseDrag(swiper);
+      }
 
       // Handle lazy-loaded images
       const images = swiperElement.querySelectorAll('img');
@@ -1154,7 +1162,7 @@
             img.addEventListener('load', () => {
               loadedImages++;
               if (loadedImages === images.length) {
-                swiper.update();
+                if (!nativeScroll) swiper.update();
                 if (typeof ScrollTrigger !== 'undefined') {
                   ScrollTrigger.refresh();
                 }
@@ -1166,7 +1174,7 @@
         // If all images were already loaded
         if (loadedImages === images.length) {
           setTimeout(() => {
-            swiper.update();
+            if (!nativeScroll) swiper.update();
             if (typeof ScrollTrigger !== 'undefined') {
               ScrollTrigger.refresh();
             }

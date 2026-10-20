@@ -899,20 +899,26 @@
   function setBleed(swiper) {
     const r = swiper.el.getBoundingClientRect();
     const vw = document.documentElement.clientWidth;
-    swiper.el.style.setProperty('--slider-bleed-left', Math.max(0, Math.round(r.left)) + 'px');
-    swiper.el.style.setProperty('--slider-bleed-right', Math.max(0, Math.round(vw - r.right)) + 'px');
+    // Set on the scroll area: Swiper re-runs update() when the container's attributes change
+    swiper.wrapperEl.style.setProperty('--slider-bleed-left', Math.max(0, Math.round(r.left)) + 'px');
+    swiper.wrapperEl.style.setProperty('--slider-bleed-right', Math.max(0, Math.round(vw - r.right)) + 'px');
   }
 
-  // Run once the scroll area has stopped moving
+  // Run once the scroll area has stopped moving (no scroll events for 120ms, at most 1.5s)
   function onScrollEnd(scroller, fn) {
-    if ('onscrollend' in window) {
-      scroller.addEventListener('scrollend', fn, { once: true });
-      return;
+    let finished = false;
+    let t = setTimeout(done, 160);
+    const cap = setTimeout(done, 1500);
+    function onScroll() { clearTimeout(t); t = setTimeout(done, 120); }
+    function done() {
+      if (finished) return;
+      finished = true;
+      clearTimeout(t);
+      clearTimeout(cap);
+      scroller.removeEventListener('scroll', onScroll);
+      fn();
     }
-    let t = setTimeout(done, 150);
-    function onScroll() { clearTimeout(t); t = setTimeout(done, 150); }
-    function done() { scroller.removeEventListener('scroll', onScroll); fn(); }
-    scroller.addEventListener('scroll', onScroll);
+    scroller.addEventListener('scroll', onScroll, { passive: true });
   }
 
   // Mouse: drag the cards; on release they glide a little and settle on the nearest card
@@ -968,7 +974,7 @@
         return;
       }
       onScrollEnd(scroller, () => scroller.removeAttribute('data-slider-dragging'));
-      swiper.slideTo(index);
+      scroller.scrollTo({ left: grid[index], behavior: 'smooth' });
     }
     window.addEventListener('pointerup', release);
     window.addEventListener('pointercancel', release);
@@ -1103,7 +1109,9 @@
             }
           },
           init: function () {
-            this.update();
+            // In CSS mode update() would run before the browser reports the initial
+            // scroll position and jump back to the first card
+            if (!this.params.cssMode) this.update();
             if (typeof ScrollTrigger !== 'undefined') {
               ScrollTrigger.refresh();
             }

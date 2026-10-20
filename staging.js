@@ -201,8 +201,11 @@ const loadLibrary = (function () {
       }
       if (autoplay) video.autoplay = false;
 
-      const isSafariNative = !!video.canPlayType('application/vnd.apple.mpegurl');
-      const canUseHlsJs = !!(window.Hls && window.Hls.isSupported()) && !isSafariNative;
+      // Prefer hls.js wherever it runs: it controls the start quality. Chrome now also
+      // plays HLS natively, but its native player starts at 240p. Native playback is
+      // the fallback for browsers without Media Source support (older iPhones).
+      const canUseHlsJs = !!(window.Hls && window.Hls.isSupported());
+      const isSafariNative = !canUseHlsJs && !!video.canPlayType('application/vnd.apple.mpegurl');
 
       let isAttached = false;
       let userInteracted = false;
@@ -365,9 +368,9 @@ const loadLibrary = (function () {
 
   // Initialize
   if (!document.querySelector('[data-bunny-background-init]')) return;
-  // Safari plays HLS natively; other browsers need hls.js
-  const nativeHls = !!document.createElement('video').canPlayType('application/vnd.apple.mpegurl');
-  (nativeHls ? Promise.resolve() : loadLibrary('Hls'))
+  // hls.js needs Media Source support; without it the video plays natively
+  const mediaSource = !!(window.MediaSource || window.ManagedMediaSource);
+  (mediaSource ? loadLibrary('Hls') : Promise.resolve())
     .catch((error) => console.error(error))
     .then(() => new BunnyPlayerBackground());
 })();

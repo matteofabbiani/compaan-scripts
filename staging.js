@@ -954,6 +954,9 @@
         initialSlide: isMobile ? 0 : attributes.initialSlide,
         effect: attributes.effect,
         grabCursor: false,
+        // Listen on the whole slider, so a drag that starts in the gap between two
+        // cards works too (the moving strip doesn't cover those gaps once it has moved)
+        touchEventsTarget: 'container',
         centeredSlides: isMobile ? false : attributes.centeredSlides,
         spaceBetween: attributes.spaceBetween,
 
@@ -1035,13 +1038,13 @@
           },
           // Closed hand while dragging; links in the cards keep their pointer at rest
           touchStart: function () {
-            this.wrapperEl.style.cursor = 'grabbing';
+            this.el.style.cursor = 'grabbing';
           },
           sliderMove: function () {
-            this.wrapperEl.style.cursor = 'grabbing';
+            this.el.style.cursor = 'grabbing';
           },
           touchEnd: function () {
-            this.wrapperEl.style.cursor = '';
+            this.el.style.cursor = '';
           },
           init: function () {
             this.update();

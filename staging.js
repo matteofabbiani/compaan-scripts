@@ -1049,10 +1049,13 @@
         centeredSlides: isMobile ? false : attributes.centeredSlides,
         spaceBetween: attributes.spaceBetween,
 
-        // Observer for DOM changes
-        observer: true,
-        observeParents: true,
-        observeSlideChildren: true,
+        // No DOM observer: in CSS mode every observed change (Lenis classes on <html>,
+        // the offset-swapped class below) re-ran update() and snapped the scroll back
+        // mid-swipe. The slides don't change after load; size changes are still
+        // handled by Swiper's resize observer.
+        observer: false,
+        observeParents: false,
+        observeSlideChildren: false,
 
         // Fade effect settings
         fadeEffect: attributes.effect === 'fade' ? {

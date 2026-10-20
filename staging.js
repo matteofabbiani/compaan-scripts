@@ -40,7 +40,9 @@
       smoothWheel: true,
       wheelMultiplier: 1,
       touchMultiplier: 2,
-      infinite: false
+      infinite: false,
+      // A sideways swipe over a slider scrolls the slider natively (see SWIPER module)
+      prevent: (node) => node.sliderGestureUntil > performance.now()
     });
 
     // Connect Lenis to GSAP ScrollTrigger
@@ -883,14 +885,100 @@
 })();
 
 /* ============================================================
-   = SWIPER SLIDER SETUP WITH MOBILE FREE MODE                 =
+   = SWIPER SLIDER SETUP (NATIVE SCROLL)                       =
    ============================================================ */
-// Swiper Setup with offset swapping, proper height calculation, and mobile free-flow
+// Swiper in CSS mode: the browser scrolls and snaps the cards, so trackpad and
+// touch swipes keep the device's own momentum. Mouse dragging is added below.
+// CSS: Global Styles -> page_code_sliders embed.
 (function () {
   const swiperElements = document.querySelectorAll('[mf-swiper="swiper"]');
   const isMobile = window.innerWidth < 768;
-  // Mouse or trackpad (not touch): grab cursor, inertia that settles on a card, sideways trackpad swipes
   const finePointer = window.matchMedia('(hover: hover) and (pointer: fine)').matches;
+
+  // Edge-to-edge scroll area: tell the CSS how far the slider sits from the screen edges
+  function setBleed(swiper) {
+    const r = swiper.el.getBoundingClientRect();
+    const vw = document.documentElement.clientWidth;
+    swiper.el.style.setProperty('--slider-bleed-left', Math.max(0, Math.round(r.left)) + 'px');
+    swiper.el.style.setProperty('--slider-bleed-right', Math.max(0, Math.round(vw - r.right)) + 'px');
+  }
+
+  // Run once the scroll area has stopped moving
+  function onScrollEnd(scroller, fn) {
+    if ('onscrollend' in window) {
+      scroller.addEventListener('scrollend', fn, { once: true });
+      return;
+    }
+    let t = setTimeout(done, 150);
+    function onScroll() { clearTimeout(t); t = setTimeout(done, 150); }
+    function done() { scroller.removeEventListener('scroll', onScroll); fn(); }
+    scroller.addEventListener('scroll', onScroll);
+  }
+
+  // Mouse: drag the cards; on release they glide a little and settle on the nearest card
+  function enableMouseDrag(swiper) {
+    const scroller = swiper.wrapperEl;
+    let drag = null;
+    let suppressClick = false;
+
+    scroller.addEventListener('dragstart', (e) => e.preventDefault());
+
+    scroller.addEventListener('pointerdown', (e) => {
+      if (e.pointerType !== 'mouse' || e.button !== 0) return;
+      if (e.target.closest('input, textarea, select, button')) return;
+      e.preventDefault(); // no text selection while dragging
+      drag = { id: e.pointerId, x: e.clientX, left: scroller.scrollLeft, moved: false, samples: [[e.timeStamp, e.clientX]] };
+    });
+
+    window.addEventListener('pointermove', (e) => {
+      if (!drag || e.pointerId !== drag.id) return;
+      const dx = e.clientX - drag.x;
+      if (!drag.moved) {
+        if (Math.abs(dx) < 5) return;
+        drag.moved = true;
+        scroller.setAttribute('data-slider-dragging', '');
+      }
+      scroller.scrollLeft = drag.left - dx;
+      drag.samples.push([e.timeStamp, e.clientX]);
+      if (drag.samples.length > 8) drag.samples.shift();
+    });
+
+    function release(e) {
+      if (!drag || e.pointerId !== drag.id) return;
+      const d = drag;
+      drag = null;
+      if (!d.moved) return;
+      suppressClick = true;
+      setTimeout(() => { suppressClick = false; }, 50);
+
+      // Speed over the last ~100ms of the drag (px per ms)
+      const last = d.samples[d.samples.length - 1];
+      const first = d.samples.find((s) => last[0] - s[0] <= 100) || last;
+      const dt = last[0] - first[0];
+      const velocity = dt > 0 && e.timeStamp - last[0] < 80 ? (last[1] - first[1]) / dt : 0;
+      const target = scroller.scrollLeft - velocity * 140;
+
+      // Nearest card to where the glide would end
+      const grid = swiper.snapGrid;
+      let index = 0;
+      grid.forEach((pos, i) => { if (Math.abs(pos - target) < Math.abs(grid[index] - target)) index = i; });
+      if (Math.abs(scroller.scrollLeft - grid[index]) < 1) {
+        // Already on that card: nothing will scroll
+        scroller.removeAttribute('data-slider-dragging');
+        return;
+      }
+      onScrollEnd(scroller, () => scroller.removeAttribute('data-slider-dragging'));
+      swiper.slideTo(index);
+    }
+    window.addEventListener('pointerup', release);
+    window.addEventListener('pointercancel', release);
+
+    scroller.addEventListener('click', (e) => {
+      if (!suppressClick) return;
+      e.preventDefault();
+      e.stopPropagation();
+    }, true);
+  }
 
   swiperElements.forEach((swiperElement) => {
     try {
@@ -918,10 +1006,6 @@
         paginationBulletActiveClass: swiperElement.getAttribute(
           'mf-swiper-pagination-bullet-active-class') || 'swiper_bullet-active',
         navigationNextEl: swiperElement.getAttribute('mf-swiper-navigation-next-el'),
-        // The Webflow class is swiper_button-disable (kept by a hidden placeholder in each
-        // slider); the mf-swiper-navigation-disabled-class attribute names a class that does not exist
-        navigationDisabledClass: 'swiper_button-disable',
-        keyboard: swiperElement.getAttribute('mf-swiper-keyboard') === 'true',
         navigationPrevEl: swiperElement.getAttribute('mf-swiper-navigation-prev-el'),
         mobileSlidesPerView: parseFloat(swiperElement.getAttribute(
           'mf-swiper-mobile-slides-per-view')) || 1,
@@ -954,8 +1038,8 @@
         speed: attributes.speed,
         initialSlide: isMobile ? 0 : attributes.initialSlide,
         effect: attributes.effect,
-        // Hand cursor on every slider (the mf-swiper-grab-cursor attribute is no longer read)
-        grabCursor: true,
+        // Native scrolling; snapping comes from the page_code_sliders CSS
+        cssMode: true,
         centeredSlides: isMobile ? false : attributes.centeredSlides,
         spaceBetween: attributes.spaceBetween,
 
@@ -989,32 +1073,9 @@
         navigation: {
           nextEl: nextEl || null,
           prevEl: prevEl || null,
-          disabledClass: attributes.navigationDisabledClass
-        },
-
-        keyboard: {
-          enabled: attributes.keyboard,
-          onlyInViewport: true
-        },
-
-
-        // Inertia everywhere. Phones keep the free flow; from 768px the slider
-        // glides on after a flick and then settles on the nearest card.
-        freeMode: isMobile ? {
-          enabled: true,
-          momentum: true,
-          momentumRatio: 0.8,
-          momentumVelocityRatio: 0.8,
-          momentumBounce: true,
-          momentumBounceRatio: 0.8,
-          sticky: false
-        } : {
-          enabled: true,
-          momentum: true,
-          momentumRatio: 0.35,
-          momentumVelocityRatio: 0.6,
-          momentumBounce: false,
-          sticky: true
+          // Webflow class (kept by a hidden placeholder in each slider); the
+          // mf-swiper-navigation-disabled-class attribute names a class that does not exist
+          disabledClass: 'swiper_button-disable'
         },
 
         // Responsive breakpoints (no freeMode here, handled above)
@@ -1061,28 +1122,14 @@
         }
       });
 
-      // Two-finger sideways swipe on a trackpad: the slider follows the fingers 1:1 and
-      // settles on the nearest card once the swipe (including the trackpad's own glide)
-      // has stopped. Vertical scrolling over a slider is left to the page.
-      if (finePointer) {
-        let settleTimer = null;
-        swiper.el.addEventListener('wheel', (e) => {
-          if (swiper.destroyed || swiper.isLocked) return;
-          if (Math.abs(e.deltaX) <= Math.abs(e.deltaY)) return;
-          e.preventDefault();
-          e.stopPropagation(); // keep Lenis out of it
-          const delta = e.deltaMode === 1 ? e.deltaX * 16 : e.deltaX;
-          const next = Math.min(swiper.minTranslate(),
-            Math.max(swiper.maxTranslate(), swiper.translate - delta));
-          swiper.setTransition(0);
-          swiper.setTranslate(next);
-          swiper.updateProgress();
-          swiper.updateActiveIndex();
-          swiper.updateSlidesClasses();
-          clearTimeout(settleTimer);
-          settleTimer = setTimeout(() => swiper.slideToClosest(450), 160);
-        }, { passive: false });
-      }
+      // Native scroll setup
+      setBleed(swiper);
+      window.addEventListener('resize', () => setBleed(swiper));
+      // Leave sideways trackpad gestures to the browser; Lenis checks this (see Lenis setup)
+      swiper.wrapperEl.addEventListener('wheel', (e) => {
+        if (Math.abs(e.deltaX) > Math.abs(e.deltaY)) swiper.wrapperEl.sliderGestureUntil = performance.now() + 250;
+      }, { passive: true });
+      if (finePointer) enableMouseDrag(swiper);
 
       // Handle lazy-loaded images
       const images = swiperElement.querySelectorAll('img');
